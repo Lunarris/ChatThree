@@ -179,7 +179,7 @@ public sealed class Plugin : IDalamudPlugin
             #endif
 
             // Automatically start the webserver if requested
-            if (Config.WebinterfaceAutoStart)
+            if (Config is { WebinterfaceEnabled: true, WebinterfaceAutoStart: true })
             {
                 Task.Run(() =>
                 {
