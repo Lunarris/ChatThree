@@ -4,7 +4,7 @@
 ---
 
 ### IPC Integration
-Other plugins can easily integrate their functionality into the context menu of chat2
+Other plugins can easily integrate their functionality into the existing context menu of chat2
 For more infos read [IPC Guide](ipc.md)
 
 ---
