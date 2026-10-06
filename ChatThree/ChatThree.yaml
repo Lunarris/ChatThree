@@ -1,9 +1,10 @@
-name: Chat Three
+name: Chat 3
 author: Lunarris
-punchline: Chat Three re-worked for me! - ♪ A slightly new chat, forked and reworked ♪
+punchline: Chat 3 re-worked for me! - ♪ A slightly new chat, forked and reworked ♪
 description: |-
   Chat 3 is a trimmed fork of ChatTwo for personal use. It is trimmed and made to be a lite runner. No upstream maintaining will be kept and will feature the same IPC.
 repo_url: https://github.com/Lunarris/ChatThree
+icon_url: https://raw.githubusercontent.com/Lunarris/ChatThree/main/ChatThree/images/icon.png
 accepts_feedback: true
 tags:
   - Social
