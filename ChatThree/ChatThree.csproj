@@ -1,0 +1,17 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+    <PropertyGroup>
+        <Version>1.0.8</Version>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MessagePack" Version="3.1.7" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+        <PackageReference Include="Pidgin" Version="3.3.0" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="images\" />
+    </ItemGroup>
+</Project>

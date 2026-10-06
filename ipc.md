@@ -1,7 +1,7 @@
 # Context Menu IPC Integration
 
 If you want to display custom menu items in the chat context menu, you can use
-Chat 2's IPC.
+Chat 3's IPC.
 
 Here's an example.
 
@@ -14,7 +14,7 @@ public class ContextMenuIntegration {
     // when your plugin is unloaded.
     private ICallGateSubscriber<string, object?> Unregister { get; }
     // You should subscribe to this event in order to receive a notification
-    // when Chat 2 is loaded or updated, so you can re-register.
+    // when Chat 3 is loaded or updated, so you can re-register.
     private ICallGateSubscriber<object?> Available { get; }
     // Subscribe to this to draw your custom context menu items.
     private ICallGateSubscriber<string, PlayerPayload?, ulong, Payload?, SeString?, SeString?, object?> Invoke { get; }
@@ -22,7 +22,7 @@ public class ContextMenuIntegration {
     // The registration ID.
     private string? _id;
 
-    public ChatTwoIpc(DalamudPluginInterface @interface) {
+    public ChatThreeIpc(DalamudPluginInterface @interface) {
         this.Register = @interface.GetIpcSubscriber<string>("ChatTwo.Register");
         this.Unregister = @interface.GetIpcSubscriber<string, object?>("ChatTwo.Unregister");
         this.Invoke = @interface.GetIpcSubscriber<string, PlayerPayload?, ulong, Payload?, SeString?, SeString?, object?>("ChatTwo.Invoke");
@@ -30,10 +30,10 @@ public class ContextMenuIntegration {
     }
 
     public void Enable() {
-        // When Chat 2 becomes available (if it loads after this plugin) or when
-        // Chat 2 is updated, register automatically.
+        // When Chat 3 becomes available (if it loads after this plugin) or when
+        // Chat 3 is updated, register automatically.
         this.Available.Subscribe(() => this.Register());
-        // Register if Chat 2 is already loaded.
+        // Register if Chat 3 is already loaded.
         this.Register();
 
         // Listen for context menu events.
@@ -75,7 +75,7 @@ public class ContextMenuIntegration {
 
 # Typing State IPC
 
-If you need to know whether the player is currently interacting with Chat 2's
+If you need to know whether the player is currently interacting with Chat 3's
 input box, subscribe to the typing IPC.
 - `ChatTwo.GetChatInputState`: call this function to retrieve the current state.
 - `ChatTwo.ChatInputStateChanged`: subscribe to this event to receive updates
@@ -84,19 +84,19 @@ Both IPC endpoints use the same tuple payload:
 ```
 (bool InputVisible, bool InputFocused, bool HasText, bool IsTyping, int TextLength, ChatType ChannelType)
 ```
-- `InputVisible`: `true` when Chat 2 is not hidden by user/cutscene/battle
+- `InputVisible`: `true` when Chat 3 is not hidden by user/cutscene/battle
   settings.
-- `InputFocused`: `true` while the Chat 2 input box currently has keyboard focus.
+- `InputFocused`: `true` while the Chat 3 input box currently has keyboard focus.
 - `HasText`: `true` when the input buffer contains more than whitespace.
 - `IsTyping`: convenience flag (`InputFocused && HasText`).
 - `TextLength`: length of the raw input buffer.
-- `ChannelType`: the `ChatTwo.Code.ChatType` representing the channel/mode that
+- `ChannelType`: the `ChatThree.Code.ChatType` representing the channel/mode that
   will be used if the buffer is submitted. This value comes from the current
-  tab's `UsedChannel` (`ChatTwo/Configuration.cs`) which the plugin keeps in
-  sync by hooking the in-game shell (`ChatTwo/GameFunctions/Chat.cs`) and by
+  tab's `UsedChannel` (`ChatThree/Configuration.cs`) which the plugin keeps in
+  sync by hooking the in-game shell (`ChatThree/GameFunctions/Chat.cs`) and by
   resolving temporary overrides inside the chat UI
-  (`ChatTwo/Ui/ChatLogWindow.cs:597`). `InputChannel` values are converted into
-  the exported `ChatType` via `ChatTwo/Code/InputChannelExt.ToChatType`.
+  (`ChatThree/Ui/ChatLogWindow.cs:597`). `InputChannel` values are converted into
+  the exported `ChatType` via `ChatThree/Code/InputChannelExt.ToChatType`.
 Example usage:
 ```cs
 public sealed class TypingIntegration {

@@ -1,0 +1,563 @@
+﻿using System.Text;
+using ChatThree.Code;
+using ChatThree.GameFunctions.Types;
+using ChatThree.Resources;
+using ChatThree.Util;
+using Dalamud.Game.Text.SeStringHandling;
+using Dalamud.Hooking;
+using Dalamud.Memory;
+using Dalamud.Utility.Signatures;
+using FFXIVClientStructs.FFXIV.Application.Network;
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI.Info;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using FFXIVClientStructs.FFXIV.Client.UI.Shell;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using InteropGenerator.Runtime;
+using Lumina.Text.ReadOnly;
+
+using ValueType = FFXIVClientStructs.FFXIV.Component.GUI.AtkValueType;
+
+namespace ChatThree.GameFunctions;
+
+public sealed unsafe class Chat : IDisposable
+{
+    // Functions
+    [Signature("48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC ?? 48 8D B9 ?? ?? ?? ?? 33 C0")]
+    private readonly delegate* unmanaged<RaptureLogModule*, ushort, Utf8String*, Utf8String*, ulong, ulong, ushort, byte, int, byte, void> PrintTellNative = null!;
+
+    [Signature("E8 ?? ?? ?? ?? 48 8D 4C 24 ?? E8 ?? ?? ?? ?? 48 8D 8C 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? B0 ?? 48 8B 8C 24")]
+    private readonly delegate* unmanaged<NetworkModule*, ulong, ushort, Utf8String*, Utf8String*, ushort, ushort, byte> SendTellNative = null!;
+
+    // Client::UI::AddonChatLog.OnRefresh
+    [Signature("40 53 57 41 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 4D 8B F8", DetourName = nameof(ChatLogRefreshDetour))]
+    private Hook<ChatLogRefreshDelegate>? ChatLogRefreshHook = null!;
+    private delegate byte ChatLogRefreshDelegate(nint log, ushort eventId, AtkValue* value);
+
+    // Replace with CS version later
+    [Signature("48 89 5C 24 ?? 55 56 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 83 B9", DetourName = nameof(ContextMenuTellInForayDetour))]
+    private Hook<ContextMenuTellInForayDelegate>? ContextMenuTellInForayHook = null!;
+    private delegate void ContextMenuTellInForayDelegate(RaptureShellModule* module, Utf8String* playerName, Utf8String* worldName, ushort worldId, ulong accountId, ulong contentId, ushort reason);
+
+    private readonly Hook<AgentChatLog.Delegates.ChangeChannelName>? ChangeChannelNameHook;
+    private readonly Hook<RaptureShellModule.Delegates.ReplyInSelectedChatMode>? ReplyInSelectedChatModeHook;
+    private readonly Hook<RaptureShellModule.Delegates.SetContextTellTarget>? SetChatLogTellTargetHook;
+
+    // Pointers
+    [Signature("48 8D 1D ?? ?? ?? ?? 8B 05", ScanType = ScanType.StaticAddress)]
+    private readonly char* LastTypedCharacter = null!;
+
+    private Plugin Plugin { get; }
+
+    public Chat(Plugin plugin)
+    {
+        Plugin = plugin;
+        Plugin.GameInteropProvider.InitializeFromAttributes(this);
+
+        ChatLogRefreshHook?.Enable();
+        ContextMenuTellInForayHook?.Enable();
+
+        ChangeChannelNameHook = Plugin.GameInteropProvider.HookFromAddress<AgentChatLog.Delegates.ChangeChannelName>(AgentChatLog.MemberFunctionPointers.ChangeChannelName, ChangeChannelNameDetour);
+        ChangeChannelNameHook.Enable();
+
+        ReplyInSelectedChatModeHook = Plugin.GameInteropProvider.HookFromAddress<RaptureShellModule.Delegates.ReplyInSelectedChatMode>(RaptureShellModule.MemberFunctionPointers.ReplyInSelectedChatMode, ReplyInSelectedChatModeDetour);
+        ReplyInSelectedChatModeHook.Enable();
+
+        SetChatLogTellTargetHook = Plugin.GameInteropProvider.HookFromAddress<RaptureShellModule.Delegates.SetContextTellTarget>(RaptureShellModule.MemberFunctionPointers.SetContextTellTarget, SetContextTellTarget);
+        SetChatLogTellTargetHook.Enable();
+
+        Plugin.ClientState.Login += Login;
+        Login();
+    }
+
+    public void Dispose()
+    {
+        Plugin.ClientState.Login -= Login;
+
+        SetChatLogTellTargetHook?.Dispose();
+        ReplyInSelectedChatModeHook?.Dispose();
+        ChangeChannelNameHook?.Dispose();
+        ChatLogRefreshHook?.Dispose();
+        ContextMenuTellInForayHook?.Dispose();
+    }
+
+    public static string? GetLinkshellName(uint idx)
+    {
+        var utf = InfoProxyChat.Instance()->GetLinkShellName(idx);
+        return utf.HasValue ? utf.ToString() : null;
+    }
+
+    public static string? GetCrossLinkshellName(uint idx)
+    {
+        var utf = InfoProxyCrossWorldLinkshell.Instance()->GetCrossworldLinkshellName(idx);
+        return utf != null ? utf->ToString() : null;
+    }
+
+    private static int GetRotateIdx(RotateMode mode) => mode switch
+    {
+        RotateMode.Forward => 1,
+        RotateMode.Reverse => -1,
+        _ => 0,
+    };
+
+    public static void RotateLinkshellHistory(RotateMode mode)
+    {
+        var uiModule = UIModule.Instance();
+        if (mode == RotateMode.None)
+            uiModule->LinkshellCycle = -1;
+
+        uiModule->RotateLinkshellHistory(GetRotateIdx(mode));
+    }
+
+    public static void RotateCrossLinkshellHistory(RotateMode mode)
+        => UIModule.Instance()->RotateCrossLinkshellHistory(GetRotateIdx(mode));
+
+    // This function looks up a channel's user-defined color.
+    // If this function ever returns 0, it returns null instead.
+    public uint? GetChannelColor(ChatType type)
+    {
+        var parent = type.Parent();
+        switch (parent)
+        {
+            case ChatType.Debug:
+            case ChatType.Urgent:
+            case ChatType.Notice:
+                return type.DefaultColor();
+        }
+
+        Plugin.GameConfig.TryGet(parent.ToConfigEntry(), out uint color);
+
+        var rgb = color & 0xFFFFFF;
+        if (rgb == 0)
+            return null;
+
+        return 0xFF | (rgb << 8);
+    }
+
+    private void Login()
+    {
+        var agent = AgentChatLog.Instance();
+        if (agent == null)
+            return;
+
+        ChangeChannelNameDetour(agent);
+    }
+
+    private byte ChatLogRefreshDetour(nint log, ushort eventId, AtkValue* value)
+    {
+        if (Plugin.CurrentTab.InputDisabled)
+            return ChatLogRefreshHook!.Original(log, eventId, value);
+
+        if (eventId != 0x31 || value == null || value->UInt is not (0x05 or 0x0C))
+            return ChatLogRefreshHook!.Original(log, eventId, value);
+
+        if (Plugin.Functions.KeybindManager.DirectChat && LastTypedCharacter != null)
+        {
+            // FIXME: this whole system sucks
+            // FIXME v2: I hate everything about this, but it works
+            Plugin.Framework.RunOnTick(() =>
+            {
+                string? input = null;
+
+                var utf8Bytes = MemoryHelper.ReadRaw((nint)LastTypedCharacter+0x4, 2);
+                var chars = Encoding.UTF8.GetString(utf8Bytes).ToCharArray();
+                if (chars.Length == 0)
+                    return;
+
+                var c = chars[0];
+                if (c != '\0' && !char.IsControl(c))
+                    input = c.ToString();
+
+                try
+                {
+                    Plugin.ChatLog.Activated(new ChatActivatedArgs(new ChannelSwitchInfo(null)) { Input = input });
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log.Error(ex, "Error in chat Activated event");
+                }
+            });
+        }
+
+        string? addIfNotPresent = null;
+
+        var str = value + 2;
+        if (str != null && ((int) str->Type & 0xF) == (int) ValueType.String && str->String.HasValue)
+        {
+            var add = str->String.ToString();
+            if (add.Length > 0)
+                addIfNotPresent = add;
+        }
+
+        try
+        {
+            // We already called this function once, so we skip the duplicated call
+            // Also return the original value here so that vanilla chat receives all information
+            if (Plugin.ChatLog.TellSpecial)
+            {
+                Plugin.Log.Information("Return early to prevent duplicated call...");
+                return ChatLogRefreshHook!.Original(log, eventId, value);
+            }
+
+            Plugin.ChatLog.Activated(new ChatActivatedArgs(new ChannelSwitchInfo(null)) { AddIfNotPresent = addIfNotPresent });
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Error in chat Activated event");
+        }
+
+        // prevent the game from focusing the chat log
+        return 1;
+    }
+
+    private CStringPointer ChangeChannelNameDetour(AgentChatLog* agent)
+    {
+        var ret = ChangeChannelNameHook!.Original(agent);
+        if (agent == null)
+            return ret;
+
+        var channel = (uint) RaptureShellModule.Instance()->ChatType;
+        if (channel is 17 or 18)
+            channel = (uint) InputChannel.Tell;
+
+        var name = SeString.Parse(agent->ChannelLabel);
+        if (name.Payloads.Count == 0)
+            name = null;
+
+        if (name == null)
+            return ret;
+
+        var nameChunks = ChunkUtil.ToChunks(name, ChunkSource.None, null).ToList();
+        if (nameChunks.Count > 0 && nameChunks[0] is TextChunk text)
+            text.Content = text.Content.TrimStart('\uE01E').TrimStart();
+
+        string? playerName = null;
+        ushort worldId = 0;
+        if (channel == (uint) InputChannel.Tell)
+        {
+            playerName = SeString.Parse(agent->TellPlayerName).TextValue;
+            worldId = agent->TellWorldId;
+            Plugin.Log.Debug($"Detected tell target '{playerName}'@{worldId}");
+        }
+
+        Plugin.CurrentTab.CurrentChannel = new UsedChannel
+        {
+            Channel = (InputChannel) channel,
+            Name = nameChunks,
+            TellTarget = playerName != null ? new TellTarget(playerName, worldId, 0, 0) : null
+        };
+
+        return ret;
+    }
+
+    private void ReplyInSelectedChatModeDetour(RaptureShellModule* agent)
+    {
+        var replyMode = AgentChatLog.Instance()->ReplyChannel;
+        if (replyMode == -2)
+        {
+            ReplyInSelectedChatModeHook!.Original(agent);
+            return;
+        }
+
+        SetChannelWithExtraChat((InputChannel) replyMode);
+        ReplyInSelectedChatModeHook!.Original(agent);
+    }
+
+    private bool SetContextTellTarget(RaptureShellModule* a1, Utf8String* playerName, Utf8String* worldName, ushort worldId, ulong accountId, ulong contentId, ushort reason, bool setChatType)
+    {
+        if (playerName != null)
+        {
+            try
+            {
+                var target = new TellTarget(playerName->ToString(), worldId, contentId, (TellReason) reason);
+                Plugin.TellWindows?.SetContext(target);
+                Plugin.ChatLog.Activated(new ChatActivatedArgs(new ChannelSwitchInfo(InputChannel.Tell, permanent: setChatType))
+                {
+                    TellReason = (TellReason) reason,
+                    TellTarget = target,
+                });
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Error in chat Activated event");
+            }
+        }
+
+        return SetChatLogTellTargetHook!.Original(a1, playerName, worldName, worldId, accountId, contentId, reason, setChatType);
+    }
+
+    private void ContextMenuTellInForayDetour(RaptureShellModule* a1, Utf8String* playerName, Utf8String* worldName, ushort worldId, ulong accountId, ulong contentId, ushort reason)
+    {
+        if (!Plugin.CurrentTab.CurrentChannel.UseTempChannel)
+            Plugin.CurrentTab.CurrentChannel.UseTempChannel = true;
+
+        if (playerName != null)
+        {
+            try
+            {
+                var target = new TellTarget(playerName->ToString(), worldId, contentId, (TellReason) reason);
+                Plugin.ChatLog.Activated(new ChatActivatedArgs(new ChannelSwitchInfo(InputChannel.Tell))
+                {
+                    TellReason = (TellReason) reason,
+                    TellTarget = target,
+                    TellSpecial = Sheets.IsInForay(), // Handle Eureka/Bozja special
+                });
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Error in chat Activated event");
+            }
+        }
+
+        ContextMenuTellInForayHook!.Original(a1, playerName, worldName, worldId, accountId, contentId, reason);
+    }
+
+    /// <summary>
+    /// Returns true if the channel is any non-linkshell channel, or if the
+    /// linkshell actually exists.
+    /// </summary>
+    public static bool IsChannelOrExistingLinkshell(InputChannel channel)
+    {
+        var idx = channel.LinkshellIndex();
+        if (idx == uint.MaxValue || channel.IsExtraChatLinkshell())
+            return true;
+        if (channel.IsLinkshell() && ValidLinkshell(idx))
+            return true;
+        if (channel.IsCrossLinkshell() && ValidCrossLinkshell(idx))
+            return true;
+        return false;
+    }
+
+    public static bool ValidLinkshell(uint idx)
+    {
+        if (idx > 7)
+            return false;
+        return InfoProxyLinkshell.Instance()->LinkShells[(int) idx].Id != 0;
+    }
+
+    public static bool ValidCrossLinkshell(uint idx)
+    {
+        if (idx > 7)
+            return false;
+        return InfoProxyCrossWorldLinkshell.Instance()->CrossWorldLinkshells[(int) idx].Name.Length > 0;
+    }
+
+    private static uint? RotateLinkshell(uint currentIndex, RotateMode rotate, Func<uint, bool> validFn)
+    {
+        if (rotate == RotateMode.None)
+            return null;
+
+        var delta = rotate switch
+        {
+            RotateMode.Forward => 1,
+            RotateMode.Reverse => -1,
+            _ => 1,
+        };
+
+        // Iterate up to 8 times to find a valid linkshell.
+        for (var i = 0; i < 8; i++)
+        {
+            currentIndex = (uint) ((8 + currentIndex + delta) % 8);
+            if (validFn(currentIndex))
+                return currentIndex;
+        }
+
+        return null;
+    }
+
+    public static InputChannel? ResolveTempInputChannel(InputChannel? currentTempChannel, InputChannel channel, RotateMode rotate)
+    {
+        switch (channel)
+        {
+            case InputChannel.Linkshell1 or InputChannel.CrossLinkshell1 when rotate != RotateMode.None:
+            {
+                var module = UIModule.Instance();
+
+                var currentIndex = channel is InputChannel.Linkshell1 ? (uint) module->LinkshellCycle : (uint) module->CrossWorldLinkshellCycle;
+                if (currentTempChannel != null)
+                {
+                    switch (channel)
+                    {
+                        case InputChannel.Linkshell1 when currentTempChannel.Value.IsLinkshell():
+                        case InputChannel.CrossLinkshell1 when currentTempChannel.Value.IsCrossLinkshell():
+                            currentIndex = currentTempChannel.Value.LinkshellIndex();
+                            break;
+                    }
+                }
+
+                var idx = RotateLinkshell(currentIndex, rotate, channel == InputChannel.Linkshell1 ? ValidLinkshell : ValidCrossLinkshell);
+                return channel + idx;
+            }
+            default:
+                return channel;
+        }
+    }
+
+    public void SetChannelWithExtraChat(InputChannel? channel)
+    {
+        channel ??= InputChannel.Say;
+        if (channel != InputChannel.Tell)
+        {
+            Plugin.CurrentTab.CurrentChannel.TellTarget = null;
+            Plugin.CurrentTab.CurrentChannel.TempTellTarget = null;
+        }
+
+        // Instead of calling SetChannel(), we ask the ExtraChat plugin to set a
+        // channel override by just calling the command directly.
+        if (channel.Value.IsExtraChatLinkshell())
+        {
+            // Check that the command is registered in Dalamud so the game code
+            // never sees the command itself.
+            if (!Plugin.CommandManager.Commands.ContainsKey(channel.Value.Prefix()))
+                return;
+
+            // Send the command through the game chat. We can't call
+            // ICommandManager.ProcessCommand() here because ExtraChat only
+            // registers stub handlers and actually processes its commands in a
+            // SendMessage detour.
+            var bytes = Encoding.UTF8.GetBytes(channel.Value.Prefix());
+            ChatBox.SendMessageUnsafe(bytes);
+
+            Plugin.CurrentTab.CurrentChannel.Channel = channel.Value;
+            return;
+        }
+
+        var target = Plugin.CurrentTab.CurrentChannel.TempTellTarget ?? Plugin.CurrentTab.CurrentChannel.TellTarget;
+        Plugin.Functions.Chat.SetChannel(channel.Value, target);
+    }
+
+    private void SetChannel(InputChannel channel, TellTarget? tellTarget = null)
+    {
+        // ExtraChat linkshells aren't supported in game so we never want to
+        // call the ChangeChatChannel function with them.
+        //
+        // Callers should call ChatLogWindow.SetChannel() which handles
+        // ExtraChat channels
+        if (channel.IsExtraChatLinkshell())
+            return;
+
+        var target = Utf8String.FromString(tellTarget?.ToTargetString() ?? "");
+        var idx = channel.LinkshellIndex();
+        if (idx == uint.MaxValue)
+            idx = 0;
+
+        if (IsChannelOrExistingLinkshell(channel))
+            RaptureShellModule.Instance()->ChangeChatChannel(tellTarget != null ? 17 : (int)channel, idx, target, true);
+
+        target->Dtor(true);
+    }
+
+    public void SetEurekaTellChannel(string name, string worldName, ushort worldId, ulong accountId, ulong objectId, ushort reason, bool setChatType)
+    {
+        // param6 is 0 for contentId and 1 for objectId
+        // param7 is always 0 ?
+
+        if (!Plugin.CurrentTab.CurrentChannel.UseTempChannel)
+            Plugin.CurrentTab.CurrentChannel.UseTempChannel = true;
+
+        // Send tell via CommandInner later and let the game handle it
+        // Only works because we use the SetTellTargetInForay function to set all required information
+        Plugin.ChatLog.TellSpecial = true;
+
+        var utfName = Utf8String.FromString(name);
+        var utfWorld = Utf8String.FromString(worldName);
+
+        RaptureShellModule.Instance()->SetTellTargetInForay(utfName, utfWorld, worldId, accountId, objectId, reason, setChatType);
+
+        utfName->Dtor(true);
+        utfWorld->Dtor(true);
+    }
+
+    public TellHistoryInfo? GetTellHistoryInfo(int index)
+    {
+        var acquaintance = AcquaintanceModule.Instance()->GetTellHistory(index);
+        if (acquaintance == null || acquaintance->ContentId == 0)
+            return null;
+
+        var name = new ReadOnlySeStringSpan(acquaintance->Name.AsSpan()).ExtractText();
+        var world = acquaintance->WorldId;
+        var contentId = acquaintance->ContentId;
+
+        return new TellHistoryInfo(name, world, contentId);
+    }
+
+    public void SendTellUsingCommandInner(byte[] message)
+    {
+        var mes = Utf8String.FromSequence(message.NullTerminate());
+
+        RaptureShellModule.Instance()->ExecuteCommandInner(mes, UIModule.Instance());
+        RaptureAtkModule.Instance()->ClearFocus(); // Clear the focus of vanilla chat that was still active
+
+        mes->Dtor(true);
+    }
+
+    public void SendTell(TellReason reason, ulong contentId, string name, ushort homeWorld, byte[] message, string rawText)
+    {
+        if (contentId == 0)
+        {
+            Plugin.ChatGui.PrintError(Language.Chat_SendTell_Error);
+            Plugin.Log.Warning("Tried to send a tell with ContentId being 0, sorry this is an internal error.");
+            return;
+        }
+
+        var uName = Utf8String.FromString(name);
+        var uMessage = Utf8String.FromSequence(message.NullTerminate());
+
+        var encoded = Utf8String.FromUtf8String(PronounModule.Instance()->ProcessString(uMessage, true));
+        var decoded = EncodeMessage(rawText);
+        AutoTranslate.ReplaceWithPayload(ref decoded);
+
+        using var decodedUtf8String = new Utf8String(decoded.NullTerminate());
+
+        var logModule = RaptureLogModule.Instance();
+        var networkModule = Framework.Instance()->GetNetworkModuleProxy()->NetworkModule;
+
+        // // TODO: Remap TellReasons
+        if (reason == TellReason.Direct)
+            reason = TellReason.Friend;
+
+        var ok = SendTellNative(networkModule, contentId, homeWorld, uName, encoded, (ushort) reason, homeWorld);
+        if (ok == 1)
+            PrintTellNative(logModule, 33, uName, &decodedUtf8String, 0, contentId, homeWorld, 255, 0, 0);
+        else
+            Plugin.ChatGui.PrintError(Language.Chat_SendTell_Error);
+
+        encoded->Dtor(true);
+        uName->Dtor(true);
+        uMessage->Dtor(true);
+    }
+
+    private static byte[] EncodeMessage(string str) {
+        using var input = new Utf8String(str);
+        using var output = new Utf8String();
+
+        input.Copy(PronounModule.Instance()->ProcessString(&input, true));
+        output.Copy(PronounModule.Instance()->ProcessString(&input, false));
+        return output.AsSpan().ToArray();
+    }
+
+    public bool IsCharValid(char c)
+    {
+        var uC = Utf8String.FromString(c.ToString());
+
+        uC->SanitizeString((AllowedEntities) 0x27F);
+        var wasValid = uC->ToString().Length > 0;
+
+        uC->Dtor(true);
+
+        return wasValid;
+    }
+
+    public static bool CheckHideFlags()
+    {
+        // Only hide the chat in a cutscene when the vanilla chat would've
+        // also been hidden. This prevents Chat 3 from hiding for a split
+        // second before the cutscene actually starts, because the game sets
+        // the cutscene conditions before processing the skip.
+        var raptureAtkUnitManager = RaptureAtkUnitManager.Instance();
+        return raptureAtkUnitManager == null || raptureAtkUnitManager->UiFlags.HasFlag(UiFlags.Chat);
+    }
+}
