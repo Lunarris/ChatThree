@@ -1,15 +1,18 @@
 ﻿# Chat 3
-#### For Me - A fork and personalization of Anna's - ♪ A whole new chat, a new fantastic chat window ♪
+#### A personal fork of Infi and Anna's Chat 2 - ♪ A whole new chat, a new fantastic chat window ♪
 
 ---
 
-### This fork is a personal use plugin. This repo is not for public distribution, but on for version tracking and ease of install on multiple personal devices. This plugin will not be submitted for the Dalamud Repo, nor is it to interfere or affect Infi and Anna's original version.
+> **Note:** This fork is a personal-use plugin. The repo is not intended for public use; it exists
+> only for version tracking and easy installation on my own devices. It will not be submitted to the
+> official Dalamud plugin repository, nor is it meant to interfere with or affect Infi and Anna's
+> original version.
 
 ---
 
 ### IPC Integration
-Other plugins can easily integrate their functionality into the existing context menu of chat3
-For more infos read [IPC Guide](ipc.md)
+Other plugins can easily integrate their functionality into the existing context menu of Chat 3.
+For more info, read the [IPC Guide](ipc.md).
 
 ---
 
