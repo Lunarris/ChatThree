@@ -424,6 +424,15 @@ internal static class Language
     public const string Options_Alerts_Remove_Tooltip = "Remove this player";
     public const string Options_Alerts_Add = "Add player";
     public const string Options_Alerts_AddTarget = "Add current target";
+    public const string Context_Alerts = "Alerts";
+    public const string Context_AddAlert = "Add Alert";
+    public const string Context_AddAlertSuccess = "Added a sound alert for {0}";
+    public const string Context_RemoveAlert = "Remove Alert";
+    public const string Context_RemoveAlertSuccess = "Removed the sound alert for {0}";
+    public const string Context_PauseAlert = "Pause Alert";
+    public const string Context_PauseAlertSuccess = "Paused the sound alert for {0}";
+    public const string Context_UnpauseAlert = "Unpause Alert";
+    public const string Context_UnpauseAlertSuccess = "Unpaused the sound alert for {0}";
     public const string Options_DatabaseGatherCraftMessages_Name = "Save crafting and gathering messages in database";
     public const string Options_DatabaseGatherCraftMessages_Description = "If gathering and crafting messages are saved to the database, the size of the database will grow much faster, and there will be a noticeable freeze when saving settings. It is recommended to leave this disabled.";
     public const string Options_Database_OpenViewer = "Open Database Viewer: ";

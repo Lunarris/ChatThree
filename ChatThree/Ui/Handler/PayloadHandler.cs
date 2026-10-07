@@ -622,6 +622,50 @@ public sealed class PayloadHandler
         if (ImGui.Selectable(Language.Context_Target) && FindCharacterForPayload(player) is { } obj)
             Plugin.TargetManager.Target = obj;
 
+        using (var menuAlerts = ImRaii.Menu(Language.Context_Alerts))
+        {
+            if (menuAlerts.Success)
+            {
+                var alerts = Plugin.Config.PlayerAlerts.Where(a => a.IsFor(player.PlayerName, world.RowId)).ToList();
+                var hasAlert = alerts.Count > 0;
+                using (ImRaii.Disabled(hasAlert))
+                {
+                    if (ImGui.Selectable(Language.Context_AddAlert))
+                    {
+                        InputHandler.Plugin.SettingsWindow.AddPlayerAlert(new PlayerAlert { Name = player.PlayerName, World = world.RowId });
+                        WrapperUtil.AddNotification(string.Format(Language.Context_AddAlertSuccess, player.PlayerName), NotificationType.Info);
+                    }
+                }
+
+                using (ImRaii.Disabled(!hasAlert))
+                {
+                    if (ImGui.Selectable(Language.Context_RemoveAlert))
+                    {
+                        InputHandler.Plugin.SettingsWindow.RemovePlayerAlerts(player.PlayerName, world.RowId);
+                        WrapperUtil.AddNotification(string.Format(Language.Context_RemoveAlertSuccess, player.PlayerName), NotificationType.Info);
+                    }
+                }
+
+                using (ImRaii.Disabled(!alerts.Any(a => a.Enabled)))
+                {
+                    if (ImGui.Selectable(Language.Context_PauseAlert))
+                    {
+                        InputHandler.Plugin.SettingsWindow.SetPlayerAlertsEnabled(player.PlayerName, world.RowId, false);
+                        WrapperUtil.AddNotification(string.Format(Language.Context_PauseAlertSuccess, player.PlayerName), NotificationType.Info);
+                    }
+                }
+
+                using (ImRaii.Disabled(!alerts.Any(a => !a.Enabled)))
+                {
+                    if (ImGui.Selectable(Language.Context_UnpauseAlert))
+                    {
+                        InputHandler.Plugin.SettingsWindow.SetPlayerAlertsEnabled(player.PlayerName, world.RowId, true);
+                        WrapperUtil.AddNotification(string.Format(Language.Context_UnpauseAlertSuccess, player.PlayerName), NotificationType.Info);
+                    }
+                }
+            }
+        }
+
         if (validContentId && ImGui.Selectable(Language.Context_AdventurerPlate))
             if (!GameFunctions.GameFunctions.TryOpenAdventurerPlate(chunk.Message!.ContentId))
                 WrapperUtil.AddNotification(Language.Context_AdventurerPlateError, NotificationType.Warning);

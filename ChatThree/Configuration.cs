@@ -213,6 +213,12 @@ public class PlayerAlert
         if (!Enabled || Sound == 0 || string.IsNullOrWhiteSpace(Name))
             return false;
 
+        return IsFor(name, world);
+    }
+
+    // Whether this alert targets the player, regardless of it being able to play
+    public bool IsFor(string name, uint world)
+    {
         return (World == 0 || World == world) && Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase);
     }
 

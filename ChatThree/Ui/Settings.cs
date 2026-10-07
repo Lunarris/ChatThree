@@ -71,6 +71,38 @@ public sealed class SettingsWindow : Window
         Mutable.UpdateFrom(Plugin.Config, false);
     }
 
+    public void AddPlayerAlert(PlayerAlert alert)
+    {
+        Plugin.Config.PlayerAlerts.Add(alert);
+        Plugin.SaveConfig();
+
+        // Otherwise saving the open settings window would drop the new alert
+        if (IsOpen)
+            Mutable.PlayerAlerts.Add(alert.Clone());
+    }
+
+    public void RemovePlayerAlerts(string name, uint world)
+    {
+        Plugin.Config.PlayerAlerts.RemoveAll(a => a.IsFor(name, world));
+        Plugin.SaveConfig();
+
+        if (IsOpen)
+            Mutable.PlayerAlerts.RemoveAll(a => a.IsFor(name, world));
+    }
+
+    public void SetPlayerAlertsEnabled(string name, uint world, bool enabled)
+    {
+        foreach (var alert in Plugin.Config.PlayerAlerts.Where(a => a.IsFor(name, world)))
+            alert.Enabled = enabled;
+        Plugin.SaveConfig();
+
+        if (!IsOpen)
+            return;
+
+        foreach (var alert in Mutable.PlayerAlerts.Where(a => a.IsFor(name, world)))
+            alert.Enabled = enabled;
+    }
+
     public override void Draw()
     {
         if (ImGui.IsWindowAppearing())
