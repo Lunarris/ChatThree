@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
     public InputPreview InputPreview { get; }
     public readonly List<string> InputBacklog = [];
     public CommandHelpWindow CommandHelpWindow { get; }
+    public SendConfirmWindow SendConfirmWindow { get; }
     public SeStringDebugger SeStringDebugger { get; }
     public DebuggerWindow DebuggerWindow { get; }
 
@@ -121,6 +122,7 @@ public sealed class Plugin : IDalamudPlugin
             TellConversationsWindow = new TellConversationsWindow(this);
             InputPreview = new InputPreview(ChatLog.InputHandler);
             CommandHelpWindow = new CommandHelpWindow(ChatLog);
+            SendConfirmWindow = new SendConfirmWindow();
             SeStringDebugger = new SeStringDebugger(this);
             DebuggerWindow = new DebuggerWindow(this);
 
@@ -128,6 +130,7 @@ public sealed class Plugin : IDalamudPlugin
             WindowSystem.AddWindow(SettingsWindow);
             WindowSystem.AddWindow(DbViewer);
             WindowSystem.AddWindow(TellConversationsWindow);
+            WindowSystem.AddWindow(SendConfirmWindow);
             WindowSystem.AddWindow(InputPreview);
             WindowSystem.AddWindow(CommandHelpWindow);
             WindowSystem.AddWindow(SeStringDebugger);

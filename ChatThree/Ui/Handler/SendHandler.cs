@@ -13,6 +13,29 @@ public class SendHandler
     public List<string> InputBacklog => Plugin.InputBacklog;
     public int InputBacklogIdx = -1;
 
+    private static SendHandler? PendingOwner;
+    public static bool AnyPending => PendingOwner?.Pending != null;
+
+    private (Tab Tab, GuardedSend Send)? PendingInternal;
+    public (Tab Tab, GuardedSend Send)? Pending
+    {
+        get => PendingInternal;
+        set
+        {
+            PendingInternal = value;
+            if (value != null)
+            {
+                // Only one confirmation at a time: a newer one replaces the other window's
+                if (PendingOwner != null && PendingOwner != this)
+                    PendingOwner.PendingInternal = null;
+
+                PendingOwner = this;
+            }
+            else if (PendingOwner == this)
+                PendingOwner = null;
+        }
+    }
+
     private string Message = string.Empty;
     private bool TellSpecialUnused;
 
@@ -32,6 +55,12 @@ public class SendHandler
         if (!string.IsNullOrWhiteSpace(chatInput))
         {
             var trimmed = chatInput.Trim();
+            if (!tellSpecial && ChannelGuard.Check(Plugin, activeTab, trimmed) is { } guarded)
+            {
+                Pending = (activeTab, guarded);
+                return;
+            }
+
             AddBacklog(trimmed);
             InputBacklogIdx = -1;
 
@@ -105,6 +134,23 @@ public class SendHandler
         }
 
         activeTab.CurrentChannel.ResetTempChannel();
+        chatInput = string.Empty;
+    }
+
+    public void SendPending(ref string chatInput)
+    {
+        if (Pending is not var (tab, send))
+            return;
+
+        Pending = null;
+        AddBacklog(chatInput.Trim());
+        InputBacklogIdx = -1;
+
+        var bytes = Encoding.UTF8.GetBytes(send.Message);
+        AutoTranslate.ReplaceWithPayload(ref bytes);
+        ChatBox.SendMessageUnsafe(bytes);
+
+        tab.CurrentChannel.ResetTempChannel();
         chatInput = string.Empty;
     }
 

@@ -84,6 +84,12 @@ public class Configuration : IPluginConfiguration
     public bool LoadPreviousSession;
     public bool FilterIncludePreviousSessions;
     public bool SortAutoTranslate;
+
+    public bool WarnPublicChannels;
+    public bool WarnAllowParty;
+    public HashSet<ulong> WarnAllowedLinkshells = [];
+    public HashSet<string> WarnAllowedCrossLinkshells = [];
+    public HashSet<uint> WarnAllowedExtraChatLinkshells = [];
     public bool CollapseDuplicateMessages;
     public bool CollapseKeepUniqueLinks;
     public bool PlaySounds = true;
@@ -169,6 +175,11 @@ public class Configuration : IPluginConfiguration
         LoadPreviousSession = other.LoadPreviousSession;
         FilterIncludePreviousSessions = other.FilterIncludePreviousSessions;
         SortAutoTranslate = other.SortAutoTranslate;
+        WarnPublicChannels = other.WarnPublicChannels;
+        WarnAllowParty = other.WarnAllowParty;
+        WarnAllowedLinkshells = other.WarnAllowedLinkshells.ToHashSet();
+        WarnAllowedCrossLinkshells = other.WarnAllowedCrossLinkshells.ToHashSet();
+        WarnAllowedExtraChatLinkshells = other.WarnAllowedExtraChatLinkshells.ToHashSet();
         CollapseDuplicateMessages = other.CollapseDuplicateMessages;
         CollapseKeepUniqueLinks = other.CollapseKeepUniqueLinks;
         PlaySounds = other.PlaySounds;

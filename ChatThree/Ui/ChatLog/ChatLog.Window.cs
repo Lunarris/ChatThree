@@ -298,7 +298,8 @@ public partial class ChatLog : Window, IChatWindow
 
     public override void PreDraw()
     {
-        if (Plugin.Config.KeepInputFocus &&  InputHandler.Activate)
+        // Focusing the log while a send confirmation is open would pull it above the modal
+        if (Plugin.Config.KeepInputFocus && InputHandler.Activate && !SendHandler.AnyPending)
             ImGui.SetWindowFocus(WindowName);
 
         if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
@@ -329,7 +330,10 @@ public partial class ChatLog : Window, IChatWindow
         DrewThisFrame = true;
         try
         {
-            DrawChatLog();
+            // Chat can't be used until a pending send warning is answered
+            using (ImRaii.Disabled(SendHandler.AnyPending))
+                DrawChatLog();
+
             AddPopOutsToDraw();
             Plugin.TellWindows.AddWindowsToDraw();
             InputHandler.AutoCompleteHandler.DrawAutoComplete();
@@ -678,6 +682,7 @@ public partial class ChatLog : Window, IChatWindow
             var skippedRows = 0;
             var skipBaseY = 0f;
             var prevOffscreen = false;
+            var lastDrawnIndex = -1;
 
             void FlushSkipped()
             {
@@ -769,7 +774,7 @@ public partial class ChatLog : Window, IChatWindow
                 {
                     var prevMessage = messages[i - 1];
                     prevMessage.Height.TryGetValue(tab.Identifier, out var prevHeight);
-                    if (prevHeight == null || (prevMessage.IsVisible.TryGetValue(tab.Identifier, out var prevVisible) && prevVisible))
+                    if (prevHeight == null || lastDrawnIndex == i - 1)
                     {
                         var newHeight = ImGui.GetCursorPosY() - lastPosY;
 
@@ -783,30 +788,23 @@ public partial class ChatLog : Window, IChatWindow
                 }
                 lastPosY = ImGui.GetCursorPosY();
 
-                // message has rendered once
-                // message isn't visible, so render dummy
+                // message has rendered once and wasn't visible last frame:
+                // only draw it if its remembered space is on screen now
                 if (height != null && !visible)
                 {
-                    var beforeDummy = ImGui.GetCursorPos();
-
                     // skip to the message column for vis test
                     if (isTable)
                         ImGui.TableNextColumn();
 
-                    ImGui.Dummy(new Vector2(10f, height.Value));
-
-                    var nowVisible = ImGui.IsItemVisible();
-                    if (!nowVisible)
+                    if (!ImGui.IsRectVisible(new Vector2(10f, height.Value)))
                     {
+                        ImGui.Dummy(new Vector2(10f, height.Value));
                         prevOffscreen = true;
                         continue;
                     }
 
                     if (isTable)
                         ImGui.TableSetColumnIndex(0);
-
-                    ImGui.SetCursorPos(beforeDummy);
-                    message.IsVisible[tab.Identifier] = nowVisible;
                 }
 
                 if (tab.DisplayTimestamp)
@@ -858,6 +856,7 @@ public partial class ChatLog : Window, IChatWindow
 
                 message.IsVisible[tab.Identifier] = ImGui.IsItemVisible();
                 prevOffscreen = false;
+                lastDrawnIndex = i;
             }
 
             FlushSkipped();

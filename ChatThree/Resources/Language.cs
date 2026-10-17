@@ -143,6 +143,15 @@ internal static class Language
     public const string AutoTranslate_Search_Hint = "Search Auto Translate...";
     public const string Options_SortAutoTranslate_Name = "Sort the Auto Translate list";
     public const string Options_SortAutoTranslate_Description = "If this is enabled, the Auto Translate list will be sorted alphabetically.";
+    public const string Options_WarnPublicChannels_Name = "Warn before sending to public channels";
+    public const string Options_WarnPublicChannels_Description = "Asks before a message is sent to Say, Yell, Shout, custom emotes, Novice Network, Alliance or Free Company, and to Party or a linkshell unless it is allowed below. Tells and PvP team never ask.";
+    public const string Options_WarnAllowParty_Name = "Allow Party without asking";
+    public const string Options_WarnAllowedShells = "Linkshells allowed without asking";
+    public const string Options_WarnNoShells = "No linkshells found. Log in to see them here.";
+    public const string ChannelGuard_Question = "Send this to {0}?";
+    public const string Context_WarnPublicChannels = "Warn before public channels";
+    public const string ChannelGuard_Send = "Send";
+    public const string ChannelGuard_Cancel = "Don't send";
     public const string Options_OverrideStyle_Name = "Override Style";
     public const string Options_OverrideStyleDropdown_Name = "Styles";
     public const string Options_ChatTabForwardKeybind_Name = "Cycle chat tab forwards keybind";

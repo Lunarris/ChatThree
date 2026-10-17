@@ -150,6 +150,9 @@ public sealed class PayloadHandler
 
         ImGui.Checkbox(Language.Context_ScreenshotMode, ref PlayerUtil.ScreenshotMode);
 
+        if (ImGui.Checkbox(Language.Context_WarnPublicChannels, ref Plugin.Config.WarnPublicChannels))
+            InputHandler.Plugin.SaveConfig();
+
         if (ImGui.Selectable(Language.Context_HideChat))
             InputHandler.MainWindow.CurrentHideState = HideState.User;
 

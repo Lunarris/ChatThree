@@ -192,6 +192,9 @@ public class InputHandler
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(inputBytes >= CounterCriticalBytes ? ImGuiColors.DalamudRed : ImGuiColors.DalamudYellow, $"{inputBytes}/{MaxInputBytes}");
         }
+
+        if (SendHandler.Pending != null)
+            Plugin.SendConfirmWindow.Show(this);
     }
 
     private bool IsValidCommand(string command)
