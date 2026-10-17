@@ -3,6 +3,7 @@ using ChatThree.Code;
 using ChatThree.GameFunctions;
 using ChatThree.GameFunctions.Types;
 using ChatThree.Util;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace ChatThree.Ui.Handler;
 
@@ -13,28 +14,23 @@ public class SendHandler
     public List<string> InputBacklog => Plugin.InputBacklog;
     public int InputBacklogIdx = -1;
 
-    private static SendHandler? PendingOwner;
-    public static bool AnyPending => PendingOwner?.Pending != null;
+    public const int ConfirmDelayMs = 500;
+    private const uint WarnSound = 11;
 
-    private (Tab Tab, GuardedSend Send)? PendingInternal;
-    public (Tab Tab, GuardedSend Send)? Pending
+    public sealed class PendingSend(Tab tab, GuardedSend send, string text, InputChannel channel)
     {
-        get => PendingInternal;
-        set
-        {
-            PendingInternal = value;
-            if (value != null)
-            {
-                // Only one confirmation at a time: a newer one replaces the other window's
-                if (PendingOwner != null && PendingOwner != this)
-                    PendingOwner.PendingInternal = null;
+        public Tab Tab { get; } = tab;
+        public GuardedSend Send { get; } = send;
+        public string Text { get; } = text;
+        public InputChannel Channel { get; } = channel;
+        public long Since { get; } = Environment.TickCount64;
+        public bool EnterReleased { get; set; }
 
-                PendingOwner = this;
-            }
-            else if (PendingOwner == this)
-                PendingOwner = null;
-        }
+        // A held or bounced Enter must not count as the second press
+        public bool Ready => EnterReleased && Environment.TickCount64 - Since >= ConfirmDelayMs;
     }
+
+    public PendingSend? Pending;
 
     private string Message = string.Empty;
     private bool TellSpecialUnused;
@@ -55,9 +51,19 @@ public class SendHandler
         if (!string.IsNullOrWhiteSpace(chatInput))
         {
             var trimmed = chatInput.Trim();
+            if (Pending is { } pending && pending.Tab == activeTab && pending.Text == trimmed)
+            {
+                if (pending.Ready)
+                    SendPending(pending, ref chatInput);
+
+                return;
+            }
+
+            Pending = null;
             if (!tellSpecial && ChannelGuard.Check(Plugin, activeTab, trimmed) is { } guarded)
             {
-                Pending = (activeTab, guarded);
+                Pending = new PendingSend(activeTab, guarded, trimmed, activeTab.CurrentChannel.Channel);
+                UIGlobals.PlayChatSoundEffect(WarnSound);
                 return;
             }
 
@@ -137,20 +143,17 @@ public class SendHandler
         chatInput = string.Empty;
     }
 
-    public void SendPending(ref string chatInput)
+    private void SendPending(PendingSend pending, ref string chatInput)
     {
-        if (Pending is not var (tab, send))
-            return;
-
         Pending = null;
-        AddBacklog(chatInput.Trim());
+        AddBacklog(pending.Text);
         InputBacklogIdx = -1;
 
-        var bytes = Encoding.UTF8.GetBytes(send.Message);
+        var bytes = Encoding.UTF8.GetBytes(pending.Send.Message);
         AutoTranslate.ReplaceWithPayload(ref bytes);
         ChatBox.SendMessageUnsafe(bytes);
 
-        tab.CurrentChannel.ResetTempChannel();
+        pending.Tab.CurrentChannel.ResetTempChannel();
         chatInput = string.Empty;
     }
 

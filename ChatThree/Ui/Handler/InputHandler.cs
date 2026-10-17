@@ -24,6 +24,8 @@ public class InputHandler
     private const int CounterWarningBytes = 400;
     private const int CounterCriticalBytes = 480;
 
+    private static readonly Vector4 PendingFrameColour = new(0.55f, 0.1f, 0.1f, 0.85f);
+
     private const ImGuiInputTextFlags InputFlags = ImGuiInputTextFlags.CallbackAlways | ImGuiInputTextFlags.CallbackCharFilter |
                                                    ImGuiInputTextFlags.CallbackCompletion | ImGuiInputTextFlags.CallbackHistory;
 
@@ -95,6 +97,14 @@ public class InputHandler
         if (showCounter)
             inputWidth -= ImGui.CalcTextSize($"{MaxInputBytes}/{MaxInputBytes}").X + ImGui.GetStyle().ItemSpacing.X;
 
+        // A warned send stays pending only while the text, tab and channel are unchanged
+        var pending = SendHandler.Pending;
+        if (pending != null && (pending.Tab != activeTab || pending.Channel != activeTab.CurrentChannel.Channel || pending.Text != ChatInput.Trim()))
+            SendHandler.Pending = pending = null;
+
+        if (pending != null && !ImGui.IsKeyDown(ImGuiKey.Enter) && !ImGui.IsKeyDown(ImGuiKey.KeypadEnter))
+            pending.EnterReleased = true;
+
         var push = inputColour != null;
         using (ImRaii.PushColor(ImGuiCol.Text, push ? ColourUtil.RgbaToAbgr(inputColour!.Value) : 0, push))
         {
@@ -107,6 +117,7 @@ public class InputHandler
 
             var chatCopy = ChatInput;
             using (ImRaii.Disabled(!isChatEnabled))
+            using (ImRaii.PushColor(ImGuiCol.FrameBg, PendingFrameColour, pending != null))
             {
                 var flags = InputFlags | (!isChatEnabled ? ImGuiInputTextFlags.ReadOnly : ImGuiInputTextFlags.None);
                 ImGui.SetNextItemWidth(inputWidth);
@@ -117,7 +128,14 @@ public class InputHandler
             if (InputFocused)
                 Plugin.InputPreview.SetSource(this);
 
-            var tooltipDraw = Plugin.Config.PreviewPosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawableFor(this);
+            if (pending != null)
+            {
+                ImGui.SetNextWindowPos(ImGui.GetItemRectMin() - new Vector2(0, ImGui.GetStyle().ItemSpacing.Y), ImGuiCond.Always, new Vector2(0, 1));
+                using var hint = ImRaii.Tooltip();
+                ImGui.TextColored(ImGuiColors.DalamudRed, string.Format(Language.ChannelGuard_Confirm, pending.Send.Destination));
+            }
+
+            var tooltipDraw = pending == null && Plugin.Config.PreviewPosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawableFor(this);
             if (tooltipDraw && ImGui.IsItemHovered())
             {
                 ImGui.SetNextWindowSize(new Vector2(500 * ImGuiHelpers.GlobalScale, -1));
@@ -130,6 +148,7 @@ public class InputHandler
                 if (ImGui.IsKeyDown(ImGuiKey.Escape))
                 {
                     ChatInput = chatCopy;
+                    SendHandler.Pending = null;
 
                     if (activeTab.CurrentChannel.UseTempChannel)
                     {
@@ -142,6 +161,10 @@ public class InputHandler
                 {
                     Plugin.CommandHelpWindow.IsOpen = false;
                     SendHandler.SendChatBox(activeTab, ref ChatInput, ref tellSpecial);
+
+                    // Keep the input open so the warned message can be confirmed with Enter
+                    if (SendHandler.Pending != null)
+                        Activate = true;
 
                     if (activeTab.CurrentChannel.UseTempChannel)
                     {
@@ -161,6 +184,9 @@ public class InputHandler
             // Only trigger unfocused if we are currently not calling the auto complete
             if (!Activate && !inputActive && AutoCompleteHandler.AutoCompleteInfo == null)
             {
+                // Leaving the input cancels a warned send, like Esc
+                SendHandler.Pending = null;
+
                 if (Plugin.Config.PlaySounds && !PlayedClosingSound)
                 {
                     PlayedClosingSound = true;
@@ -192,9 +218,6 @@ public class InputHandler
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(inputBytes >= CounterCriticalBytes ? ImGuiColors.DalamudRed : ImGuiColors.DalamudYellow, $"{inputBytes}/{MaxInputBytes}");
         }
-
-        if (SendHandler.Pending != null)
-            Plugin.SendConfirmWindow.Show(this);
     }
 
     private bool IsValidCommand(string command)

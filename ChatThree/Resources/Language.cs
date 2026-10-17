@@ -148,10 +148,8 @@ internal static class Language
     public const string Options_WarnAllowParty_Name = "Allow Party without asking";
     public const string Options_WarnAllowedShells = "Linkshells allowed without asking";
     public const string Options_WarnNoShells = "No linkshells found. Log in to see them here.";
-    public const string ChannelGuard_Question = "Send this to {0}?";
+    public const string ChannelGuard_Confirm = "Press Enter again to send to {0}. Esc to cancel.";
     public const string Context_WarnPublicChannels = "Channel gaurd";
-    public const string ChannelGuard_Send = "Send";
-    public const string ChannelGuard_Cancel = "Don't send";
     public const string Options_OverrideStyle_Name = "Override Style";
     public const string Options_OverrideStyleDropdown_Name = "Styles";
     public const string Options_ChatTabForwardKeybind_Name = "Cycle chat tab forwards keybind";

@@ -298,8 +298,7 @@ public partial class ChatLog : Window, IChatWindow
 
     public override void PreDraw()
     {
-        // Focusing the log while a send confirmation is open would pull it above the modal
-        if (Plugin.Config.KeepInputFocus && InputHandler.Activate && !SendHandler.AnyPending)
+        if (Plugin.Config.KeepInputFocus &&  InputHandler.Activate)
             ImGui.SetWindowFocus(WindowName);
 
         if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
@@ -330,10 +329,7 @@ public partial class ChatLog : Window, IChatWindow
         DrewThisFrame = true;
         try
         {
-            // Chat can't be used until a pending send warning is answered
-            using (ImRaii.Disabled(SendHandler.AnyPending))
-                DrawChatLog();
-
+            DrawChatLog();
             AddPopOutsToDraw();
             Plugin.TellWindows.AddWindowsToDraw();
             InputHandler.AutoCompleteHandler.DrawAutoComplete();

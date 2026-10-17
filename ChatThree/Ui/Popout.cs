@@ -109,7 +109,6 @@ public class Popout : Window, IChatWindow
     public override void Draw()
     {
         using var id = ImRaii.PushId($"popout-{Tab.Identifier}");
-        using var disabled = ImRaii.Disabled(SendHandler.AnyPending);
 
         LastWindowSize = ImGui.GetWindowSize();
         LastWindowPos = ImGui.GetWindowPos();
