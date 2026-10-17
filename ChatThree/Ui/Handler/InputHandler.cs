@@ -114,8 +114,10 @@ public class InputHandler
             }
             var inputActive = ImGui.IsItemActive();
             InputFocused = isChatEnabled && inputActive;
+            if (InputFocused)
+                Plugin.InputPreview.SetSource(this);
 
-            var tooltipDraw = Plugin.Config.PreviewPosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawable;
+            var tooltipDraw = Plugin.Config.PreviewPosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawableFor(this);
             if (tooltipDraw && ImGui.IsItemHovered())
             {
                 ImGui.SetNextWindowSize(new Vector2(500 * ImGuiHelpers.GlobalScale, -1));
@@ -207,7 +209,7 @@ public class InputHandler
         }
 
         // Set the cursor pos to the user selected
-        if (Plugin.InputPreview.SelectedCursorPos != -1)
+        if (Plugin.InputPreview.InputHandler == this && Plugin.InputPreview.SelectedCursorPos != -1)
         {
             data.CursorPos = Plugin.InputPreview.SelectedCursorPos;
             Plugin.InputPreview.SelectedCursorPos = -1;

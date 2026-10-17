@@ -186,7 +186,7 @@ public class TellWindows : IDisposable
             if (!Windows.Add(tab.Identifier))
                 continue;
 
-            var window = new Popout(Plugin, tab, -1)
+            var window = new Popout(Plugin, tab)
             {
                 Position = new Vector2(100, 100) + new Vector2(30, 30) * (Windows.Count - 1),
                 PositionCondition = ImGuiCond.FirstUseEver,

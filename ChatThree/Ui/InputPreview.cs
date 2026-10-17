@@ -17,7 +17,8 @@ namespace ChatThree.Ui;
 
 public partial class InputPreview : Window
 {
-    private readonly InputHandler InputHandler;
+    private readonly InputHandler MainInputHandler;
+    public InputHandler InputHandler { get; private set; }
 
     private bool Drawing;
     private bool HasEvaluation;
@@ -36,6 +37,7 @@ public partial class InputPreview : Window
         Flags = ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove |
                 ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoScrollbar;
 
+        MainInputHandler = inputHandler;
         InputHandler = inputHandler;
 
         RespectCloseHotkey = false;
@@ -48,6 +50,25 @@ public partial class InputPreview : Window
     public void Dispose()
     {
         Plugin.Framework.Update -= UpdateConditionCheck;
+    }
+
+    public void SetSource(InputHandler inputHandler)
+    {
+        if (InputHandler == inputHandler)
+            return;
+
+        InputHandler = inputHandler;
+        LastLength = 0;
+        PreviewHeight = 0;
+        PreviewMessage = null;
+        HasEvaluation = false;
+        SelectedCursorPos = -1;
+    }
+
+    public void ReleaseSource(InputHandler inputHandler)
+    {
+        if (InputHandler == inputHandler)
+            SetSource(MainInputHandler);
     }
 
     private bool ValidDraw => !string.IsNullOrEmpty(InputHandler.ChatInput) && InputHandler.ChatInput.Length >= Plugin.Config.PreviewMinimum;
@@ -80,6 +101,8 @@ public partial class InputPreview : Window
     }
 
     public bool IsDrawable => ValidDraw && HasEvaluation;
+
+    public bool IsDrawableFor(InputHandler inputHandler) => InputHandler == inputHandler && IsDrawable;
 
     private static bool IsWindowMode => Plugin.Config.PreviewPosition is PreviewPosition.Top or PreviewPosition.Bottom;
     public override bool DrawConditions()

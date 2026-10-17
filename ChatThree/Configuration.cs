@@ -44,7 +44,7 @@ public enum MigrationStatus
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    private const int LatestVersion = 6;
+    private const int LatestVersion = 7;
 
     public int Version { get; set; } = LatestVersion;
 
@@ -278,7 +278,7 @@ public class Tab
     public bool IndependentOpacity;
     public float Opacity = 100f;
     public bool InputDisabled;
-    public bool SupportsInput;
+    public bool SupportsInput = true;
 
     public bool CanMove = true;
     public bool CanResize = true;
@@ -301,7 +301,7 @@ public class Tab
 
     [NonSerialized] public UsedChannel CurrentChannel = new();
 
-    [NonSerialized] public Guid Identifier = Guid.NewGuid();
+    public Guid Identifier = Guid.NewGuid();
 
     public bool Matches(Message message)
     {

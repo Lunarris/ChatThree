@@ -101,7 +101,9 @@ public sealed class Tabs : ISettingsTab
 
             ImGui.InputText(Language.Options_Tabs_Name, ref tab.Name, 512, ImGuiInputTextFlags.EnterReturnsTrue);
             ImGui.Checkbox(Language.Options_Tabs_ShowTimestamps, ref tab.DisplayTimestamp);
-            ImGui.Checkbox(Language.Options_Tabs_PopOut, ref tab.PopOut);
+            if (ImGui.Checkbox(Language.Options_Tabs_PopOut, ref tab.PopOut) && tab.PopOut)
+                tab.SupportsInput = true;
+
             if (tab.PopOut)
             {
                 using var _ = ImRaii.PushIndent(10.0f);

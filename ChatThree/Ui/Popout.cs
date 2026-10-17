@@ -9,7 +9,6 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
-using Lumina.Extensions;
 
 namespace ChatThree.Ui;
 
@@ -17,27 +16,37 @@ public class Popout : Window, IChatWindow
 {
     private readonly Plugin Plugin;
     private readonly Tab Tab;
-    private readonly int Idx;
 
     private long FrameTime;
     private long LastActivityTime = Environment.TickCount64;
-    private bool TempTabDocked;
+    private bool Docked;
+    private HideState OwnHideState = HideState.None;
 
-    private readonly string ChatChannelPicker = "chat-popout-channel-picker";
+    private const string ChatChannelPicker = "chat-popout-channel-picker";
+    private List<(string Name, InputChannel Channel)> PickerChannels = [];
 
     public readonly InputHandler InputHandler;
 
     public Vector2 LastWindowPos { get; set; } = Vector2.Zero;
     public Vector2 LastWindowSize { get; set; } = Vector2.Zero;
-    public HideState CurrentHideState { get; set; } = HideState.None;
+    public HideState CurrentHideState
+    {
+        get => Tab.IndependentHide ? OwnHideState : Plugin.ChatLog.CurrentHideState;
+        set
+        {
+            if (Tab.IndependentHide)
+                OwnHideState = value;
+            else
+                Plugin.ChatLog.CurrentHideState = value;
+        }
+    }
 
-    public Popout(Plugin plugin, Tab tab, int idx) : base($"{tab.Name}##popout")
+    public Popout(Plugin plugin, Tab tab) : base(tab.IsTempTab ? $"{tab.Name}##popout" : $"{tab.Name}###popout-{tab.Identifier}")
     {
         Plugin = plugin;
         Tab = tab;
-        Idx = idx;
 
-        InputHandler = new InputHandler(this, plugin, $"ChatLog{idx}-{tab.Name}");
+        InputHandler = new InputHandler(this, plugin, $"popout-{tab.Identifier}");
 
         Size = new Vector2(350, 350);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -45,8 +54,6 @@ public class Popout : Window, IChatWindow
         IsOpen = true;
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
-
-        ChatChannelPicker += $"-{idx}-{tab.Name}";
     }
 
     public override void PreOpenCheck()
@@ -60,7 +67,7 @@ public class Popout : Window, IChatWindow
         FrameTime = Environment.TickCount64;
 
         var isHidden = Tab.IndependentHide
-            ? HideStateHelper.HideStateCheck(this, Tab.HideInBattle, Tab.HideDuringCutscenes, Tab.HideWhenNotLoggedIn, false)
+            ? HideStateHelper.HideStateCheck(this, Tab.HideInBattle, Tab.HideDuringCutscenes, Tab.HideWhenNotLoggedIn, Plugin.ChatLog.ActivatedThisFrame || InputHandler.Activate)
             : Plugin.ChatLog.IsHidden;
 
         if (isHidden)
@@ -82,7 +89,7 @@ public class Popout : Window, IChatWindow
         if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
             StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Push();
 
-        Flags = ImGuiWindowFlags.None;
+        Flags = ImGuiWindowFlags.NoFocusOnAppearing;
         if (!Plugin.Config.ShowPopOutTitleBar)
             Flags |= ImGuiWindowFlags.NoTitleBar;
 
@@ -92,10 +99,7 @@ public class Popout : Window, IChatWindow
         if (!Tab.CanResize)
             Flags |= ImGuiWindowFlags.NoResize;
 
-        if (Tab.IsTempTab)
-            Flags |= ImGuiWindowFlags.NoFocusOnAppearing;
-
-        if (!(Tab.IsTempTab ? TempTabDocked : Plugin.ChatLog.PopOutDocked[Idx]))
+        if (!Docked)
         {
             var alpha = Tab.IndependentOpacity ? Tab.Opacity : Plugin.Config.WindowAlpha;
             BgAlpha = alpha / 100f;
@@ -126,14 +130,21 @@ public class Popout : Window, IChatWindow
             ImGui.Separator();
         }
 
+        var ownsPreview = Tab.SupportsInput && Plugin.InputPreview.InputHandler == InputHandler;
+        if (ownsPreview && Plugin.Config.PreviewPosition is PreviewPosition.Inside or PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawable)
+            Plugin.InputPreview.CalculatePreview();
+
         var remainingHeight = Tab.SupportsInput
-            ? Plugin.ChatLog.GetRemainingHeightForMessageLog(false)
+            ? Plugin.ChatLog.GetRemainingHeightForMessageLog(ownsPreview)
             : ImGui.GetContentRegionAvail().Y;
 
         Plugin.ChatLog.DrawMessageLog(Tab, InputHandler.PayloadHandler, remainingHeight, false);
 
         if (!Tab.SupportsInput)
             return;
+
+        if (ownsPreview && Plugin.Config.PreviewPosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawable)
+            Plugin.InputPreview.DrawPreview();
 
         if (Tab.Channel is not null)
             Tab.CurrentChannel.SetChannel(Tab.Channel.Value);
@@ -142,7 +153,13 @@ public class Popout : Window, IChatWindow
             Plugin.ChatLog.DrawChannelName(Tab);
 
         if (ImGuiUtil.IconButton(FontAwesomeIcon.Comment) && Tab.Channel is null)
+        {
+            PickerChannels = Plugin.ChatLog.GetValidChannels()
+                .Where(pair => pair.Value != InputChannel.Tell)
+                .Select(pair => (pair.Key, pair.Value))
+                .ToList();
             ImGui.OpenPopup(ChatChannelPicker);
+        }
 
         if (Tab.Channel is not null && ImGui.IsItemHovered())
             ImGuiUtil.Tooltip(Language.ChatLog_SwitcherDisabled);
@@ -151,7 +168,7 @@ public class Popout : Window, IChatWindow
         {
             if (popup)
             {
-                foreach (var (name, channel) in GetValidPopupChannels())
+                foreach (var (name, channel) in PickerChannels)
                     if (ImGui.Selectable(name))
                         Tab.CurrentChannel.SetChannel(channel);
             }
@@ -161,14 +178,12 @@ public class Popout : Window, IChatWindow
 
         var tellSpecial = false;
         InputHandler.DrawInputArea(Tab, ImGui.GetContentRegionAvail().X, ref tellSpecial);
+        InputHandler.AutoCompleteHandler.DrawAutoComplete();
     }
 
     public override void PostDraw()
     {
-        if (Tab.IsTempTab)
-            TempTabDocked = ImGui.IsWindowDocked();
-        else
-            Plugin.ChatLog.PopOutDocked[Idx] = ImGui.IsWindowDocked();
+        Docked = ImGui.IsWindowDocked();
 
         if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
             StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Pop();
@@ -176,6 +191,8 @@ public class Popout : Window, IChatWindow
 
     public override void OnClose()
     {
+        Plugin.InputPreview.ReleaseSource(InputHandler);
+
         if (Tab.IsTempTab)
         {
             Plugin.TellWindows.Remove(Tab);
@@ -188,46 +205,5 @@ public class Popout : Window, IChatWindow
 
         Tab.PopOut = false;
         Plugin.SaveConfig();
-    }
-
-    private Dictionary<string, InputChannel> GetValidPopupChannels()
-    {
-        var channels = new Dictionary<string, InputChannel>();
-        foreach (var channel in Enum.GetValues<InputChannel>())
-        {
-            if (channel is InputChannel.Invalid or InputChannel.Tell)
-                continue;
-
-            var name = Sheets.LogFilterSheet.FirstOrNull(row => row.LogKind == (byte) channel.ToChatType())?.Name.ToString() ?? channel.ToChatType().Name();
-            if (channel.IsLinkshell())
-            {
-                var lsName = GameFunctions.Chat.GetLinkshellName(channel.LinkshellIndex());
-                if (string.IsNullOrWhiteSpace(lsName))
-                    continue;
-
-                name += $": {lsName}";
-            }
-
-            if (channel.IsCrossLinkshell())
-            {
-                var lsName = GameFunctions.Chat.GetCrossLinkshellName(channel.LinkshellIndex());
-                if (string.IsNullOrWhiteSpace(lsName))
-                    continue;
-
-                name += $": {lsName}";
-            }
-
-            // Check if the linkshell with this index is registered in
-            // the ExtraChat plugin by seeing if the command is
-            // registered. The command gets registered only if a
-            // linkshell is assigned (and even gets unassigned if the
-            // index changes!).
-            if (channel.IsExtraChatLinkshell() && !Plugin.CommandManager.Commands.ContainsKey(channel.Prefix()))
-                continue;
-
-            channels.Add(name, channel);
-        }
-
-        return channels;
     }
 }

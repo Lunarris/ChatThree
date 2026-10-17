@@ -518,29 +518,38 @@ public sealed class PayloadHandler
 
         InputHandler.ChunkHandler.DrawChunks(name, false);
         ImGui.Separator();
-
         var validContentId = chunk.Message?.ContentId is not (null or 0);
-        if (ImGui.Selectable(Language.Context_SendTell))
+
+        using (var menuMessageFunctions = ImRaii.Menu(Language.Context_MessageFunctions))
         {
-            // Eureka, Bozja and Occult need special handling as tells work different
-            if (!Sheets.IsInForay())
+            if (menuMessageFunctions.Success)
             {
-                InputHandler.ChatInput = $"/tell {player.PlayerName}";
-                if (world.Value.IsPublic)
-                    InputHandler.ChatInput += $"@{world.Value.Name}";
+                
+                if (ImGui.Selectable(Language.Context_SendTell))
+                {
+                    // Eureka, Bozja and Occult need special handling as tells work different
+                    if (!Sheets.IsInForay())
+                    {
+                        InputHandler.ChatInput = $"/tell {player.PlayerName}";
+                        if (world.Value.IsPublic)
+                            InputHandler.ChatInput += $"@{world.Value.Name}";
 
-                InputHandler.ChatInput += " ";
-            }
-            else if (validContentId)
-            {
-                InputHandler.Plugin.Functions.Chat.SetEurekaTellChannel(player.PlayerName, world.Value.Name.ToString(), (ushort) world.RowId, 0, chunk.Message!.ContentId, 0, false);
-            }
+                        InputHandler.ChatInput += " ";
+                    }
+                    else if (validContentId)
+                    {
+                        InputHandler.Plugin.Functions.Chat.SetEurekaTellChannel(player.PlayerName, world.Value.Name.ToString(), (ushort) world.RowId, 0, chunk.Message!.ContentId, 0, false);
+                    }
 
-            InputHandler.Activate = true;
+                    InputHandler.Activate = true;
+                }
+
+                if (world.Value.IsPublic && ImGui.Selectable(Language.Context_OpenMessenger))
+                    InputHandler.Plugin.TellWindows.Open(player.PlayerName, world.RowId);
+            }
         }
 
-        if (world.Value.IsPublic && ImGui.Selectable(Language.Context_OpenMessenger))
-            InputHandler.Plugin.TellWindows.Open(player.PlayerName, world.RowId);
+
 
         if (world.Value.IsPublic)
         {
@@ -612,16 +621,6 @@ public sealed class PayloadHandler
                 GameFunctions.Context.InviteToNoviceNetwork(player.PlayerName, (ushort) world.RowId);
         }
 
-        var inputChannel = chunk.Message?.Code.Type.ToInputChannel();
-        if (inputChannel != null && ImGui.Selectable(Language.Context_ReplyInSelectedChatMode))
-        {
-            InputHandler.Plugin.Functions.Chat.SetChannelWithExtraChat(inputChannel.Value);
-            InputHandler.Activate = true;
-        }
-
-        if (ImGui.Selectable(Language.Context_Target) && FindCharacterForPayload(player) is { } obj)
-            Plugin.TargetManager.Target = obj;
-
         using (var menuAlerts = ImRaii.Menu(Language.Context_Alerts))
         {
             if (menuAlerts.Success)
@@ -665,6 +664,9 @@ public sealed class PayloadHandler
                 }
             }
         }
+
+        if (ImGui.Selectable(Language.Context_Target) && FindCharacterForPayload(player) is { } obj)
+            Plugin.TargetManager.Target = obj;
 
         if (validContentId && ImGui.Selectable(Language.Context_AdventurerPlate))
             if (!GameFunctions.GameFunctions.TryOpenAdventurerPlate(chunk.Message!.ContentId))

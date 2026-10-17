@@ -40,8 +40,9 @@ public partial class ChatLog : Window, IChatWindow
     public Vector2 LastWindowPos { get; set; } = Vector2.Zero;
     public Vector2 LastWindowSize { get; set; } = Vector2.Zero;
 
-    public readonly List<bool> PopOutDocked = [];
     public readonly HashSet<Guid> PopOutWindows = [];
+
+    public bool ActivatedThisFrame { get; private set; }
 
     public ChatLog(Plugin plugin) : base($"{Plugin.PluginName}###chat3")
     {
@@ -246,6 +247,7 @@ public partial class ChatLog : Window, IChatWindow
     public void BeginFrame()
     {
         DrewThisFrame = false;
+        ActivatedThisFrame = InputHandler.Activate;
     }
 
     public void FinalizeFrame()
@@ -358,7 +360,7 @@ public partial class ChatLog : Window, IChatWindow
         LastViewport = ImGui.GetWindowViewport().Handle;
         WasDocked = ImGui.IsWindowDocked();
 
-        if (IsChatMode && Plugin.InputPreview.IsDrawable)
+        if (IsChatMode && Plugin.InputPreview.IsDrawableFor(InputHandler))
             Plugin.InputPreview.CalculatePreview();
 
         if (Plugin.Config.SidebarTabView)
@@ -372,7 +374,7 @@ public partial class ChatLog : Window, IChatWindow
         if (activeTab.Channel is not null)
             activeTab.CurrentChannel.SetChannel(activeTab.Channel.Value);
 
-        if (Plugin.Config.PreviewPosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawable)
+        if (Plugin.Config.PreviewPosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawableFor(InputHandler))
             Plugin.InputPreview.DrawPreview();
 
         using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.Zero))
@@ -591,7 +593,7 @@ public partial class ChatLog : Window, IChatWindow
 
     public void DrawMessageLog(Tab tab, PayloadHandler handler, float childHeight, bool switchedTab)
     {
-        using var child = ImRaii.Child("##chat3-messages", new Vector2(-1, childHeight));
+        using var child = ImRaii.Child("##chat3-messages", new Vector2(-1, childHeight), false, ImGuiWindowFlags.NoScrollbar);
         if (!child.Success)
             return;
 
@@ -902,7 +904,7 @@ public partial class ChatLog : Window, IChatWindow
                 TabSwitched(tab, previousTab);
 
             tab.Unread = 0;
-            DrawMessageLog(tab, InputHandler.PayloadHandler, GetRemainingHeightForMessageLog(true), hasTabSwitched);
+            DrawMessageLog(tab, InputHandler.PayloadHandler, GetRemainingHeightForMessageLog(Plugin.InputPreview.InputHandler == InputHandler), hasTabSwitched);
         }
 
         Plugin.WantedTab = null;
@@ -921,7 +923,7 @@ public partial class ChatLog : Window, IChatWindow
         ImGui.TableNextColumn();
 
         var hasTabSwitched = false;
-        var childHeight = GetRemainingHeightForMessageLog(true);
+        var childHeight = GetRemainingHeightForMessageLog(Plugin.InputPreview.InputHandler == InputHandler);
         using (var child = ImRaii.Child("##chat3-tab-sidebar", new Vector2(-1, childHeight)))
         {
             if (child)
@@ -1012,6 +1014,7 @@ public partial class ChatLog : Window, IChatWindow
         if (ImGuiUtil.IconButton(FontAwesomeIcon.WindowRestore, tooltip: Language.ChatLog_Tabs_PopOut))
         {
             tab.PopOut = true;
+            tab.SupportsInput = true;
             anyChanged = true;
         }
 
@@ -1021,22 +1024,15 @@ public partial class ChatLog : Window, IChatWindow
 
     private void AddPopOutsToDraw()
     {
-        if (PopOutDocked.Count != Plugin.Config.Tabs.Count)
+        foreach (var tab in Plugin.Config.Tabs)
         {
-            PopOutDocked.Clear();
-            PopOutDocked.AddRange(Enumerable.Repeat(false, Plugin.Config.Tabs.Count));
-        }
-
-        for (var i = 0; i < Plugin.Config.Tabs.Count; i++)
-        {
-            var tab = Plugin.Config.Tabs[i];
             if (!tab.PopOut)
                 continue;
 
             if (PopOutWindows.Contains(tab.Identifier))
                 continue;
 
-            var window = new Popout(Plugin, tab, i);
+            var window = new Popout(Plugin, tab);
 
             Plugin.WindowSystem.AddWindow(window);
             PopOutWindows.Add(tab.Identifier);

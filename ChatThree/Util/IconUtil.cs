@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace ChatThree.Util;
 
@@ -147,12 +145,5 @@ public static class IconUtil
             GfdFile ??= Plugin.DataManager.GetFile("common/font/gfdata.gfd")!.Data;
             return new GfdFileView(new ReadOnlySpan<byte>(Unsafe.AsPointer(ref GfdFile[0]), GfdFile.Length));
         }
-    }
-
-    public static byte[] ImageToRaw(this Image<Rgba32> image)
-    {
-        var data = new byte[4 * image.Width * image.Height];
-        image.CopyPixelDataTo(data);
-        return data;
     }
 }

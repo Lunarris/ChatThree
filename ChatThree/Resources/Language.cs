@@ -177,6 +177,7 @@ internal static class Language
     public const string Context_OpenMessenger = "Open Messenger";
     public const string Context_InviteToParty = "Invite to Party";
     public const string Context_BlockFunctions = "Block Functions";
+    public const string Context_MessageFunctions = "Message Functions";
     public const string Context_InviteToParty_SameWorld = "Same world";
     public const string Context_InviteToParty_DifferentWorld = "Different world";
     public const string Context_Promote = "Promote";
@@ -186,7 +187,6 @@ internal static class Language
     public const string Context_AddToMuteList = "Register to Mute List";
     public const string Context_AddToTermsFilter = "Add to Term Filters";
     public const string Context_InviteToNoviceNetwork = "Invite to Novice Network";
-    public const string Context_ReplyInSelectedChatMode = "Reply in Selected Chat Mode";
     public const string Context_Target = "Target";
     public const string ChatType_Debug = "Debug";
     public const string ChatType_Urgent = "Urgent";

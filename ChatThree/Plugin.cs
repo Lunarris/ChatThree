@@ -51,6 +51,7 @@ public sealed class Plugin : IDalamudPlugin
     public DbViewer DbViewer { get; }
     public TellConversationsWindow TellConversationsWindow { get; }
     public InputPreview InputPreview { get; }
+    public readonly List<string> InputBacklog = [];
     public CommandHelpWindow CommandHelpWindow { get; }
     public SeStringDebugger SeStringDebugger { get; }
     public DebuggerWindow DebuggerWindow { get; }
@@ -92,6 +93,15 @@ public sealed class Plugin : IDalamudPlugin
 
             if (Config.Tabs.Count == 0)
                 Config.Tabs.Add(TabsUtil.VanillaGeneral);
+
+            if (Config.Version < 7)
+            {
+                foreach (var tab in Config.Tabs.Where(tab => tab.PopOut))
+                    tab.SupportsInput = true;
+
+                Config.Version = 7;
+                SaveConfig();
+            }
 
             ImGuiUtil.Initialize(this);
 

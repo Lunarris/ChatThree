@@ -10,7 +10,7 @@ public class SendHandler
 {
     private readonly Plugin Plugin;
 
-    public List<string> InputBacklog = [];
+    public List<string> InputBacklog => Plugin.InputBacklog;
     public int InputBacklogIdx = -1;
 
     private string Message = string.Empty;
