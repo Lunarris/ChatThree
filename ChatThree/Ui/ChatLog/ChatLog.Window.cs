@@ -214,7 +214,7 @@ public partial class ChatLog : Window, IChatWindow
     {
         var height = ImGui.GetContentRegionAvail().Y - ImGui.CalcTextSize("A").Y * 2 - ImGui.GetStyle().ItemSpacing.Y - ImGui.GetStyle().FramePadding.Y * 2;
 
-        if (supportsInputPreview && Plugin.Config.PreviewPosition is PreviewPosition.Inside)
+        if (supportsInputPreview && InputPreview.EffectivePosition is PreviewPosition.Inside)
             height -= Plugin.InputPreview.PreviewHeight;
 
         return height;
@@ -343,7 +343,7 @@ public partial class ChatLog : Window, IChatWindow
         }
     }
 
-    private static bool IsChatMode => Plugin.Config.PreviewPosition is PreviewPosition.Inside or PreviewPosition.Tooltip;
+    private static bool IsChatMode => InputPreview.EffectivePosition is PreviewPosition.Inside or PreviewPosition.Tooltip;
     private unsafe void DrawChatLog()
     {
         // Position change has applied, so we set it to null again
@@ -374,7 +374,7 @@ public partial class ChatLog : Window, IChatWindow
         if (activeTab.Channel is not null)
             activeTab.CurrentChannel.SetChannel(activeTab.Channel.Value);
 
-        if (Plugin.Config.PreviewPosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawableFor(InputHandler))
+        if (InputPreview.EffectivePosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawableFor(InputHandler))
             Plugin.InputPreview.DrawPreview();
 
         using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.Zero))

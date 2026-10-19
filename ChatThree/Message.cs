@@ -53,13 +53,13 @@ public partial class Message
         return CachedTimestamp;
     }
 
-    public Message(ulong receiver, ulong contentId, ulong accountId, ChatCode code, List<Chunk> sender, List<Chunk> content, SeString senderSource, SeString contentSource)
+    public Message(ulong receiver, ulong contentId, ulong accountId, ChatCode code, List<Chunk> sender, List<Chunk> content, SeString senderSource, SeString contentSource, DateTimeOffset? date = null)
     {
         var extraChatChannel = ExtractExtraChatChannel(contentSource);
         Receiver = receiver;
         ContentId = contentId;
         AccountId = accountId;
-        Date = DateTimeOffset.UtcNow;
+        Date = date ?? DateTimeOffset.UtcNow;
         Code = code;
         Sender = sender;
         Content = CheckMessageContent(content);

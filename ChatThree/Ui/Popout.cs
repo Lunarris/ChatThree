@@ -131,7 +131,7 @@ public class Popout : Window, IChatWindow
         }
 
         var ownsPreview = Tab.SupportsInput && Plugin.InputPreview.InputHandler == InputHandler;
-        if (ownsPreview && Plugin.Config.PreviewPosition is PreviewPosition.Inside or PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawable)
+        if (ownsPreview && InputPreview.EffectivePosition is PreviewPosition.Inside or PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawable)
             Plugin.InputPreview.CalculatePreview();
 
         var remainingHeight = Tab.SupportsInput
@@ -143,7 +143,7 @@ public class Popout : Window, IChatWindow
         if (!Tab.SupportsInput)
             return;
 
-        if (ownsPreview && Plugin.Config.PreviewPosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawable)
+        if (ownsPreview && InputPreview.EffectivePosition is PreviewPosition.Inside && Plugin.InputPreview.IsDrawable)
             Plugin.InputPreview.DrawPreview();
 
         if (Tab.Channel is not null)

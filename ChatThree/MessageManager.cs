@@ -10,6 +10,7 @@ using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Hooking;
 using Dalamud.Interface.ImGuiNotification;
+using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -42,6 +43,19 @@ public class MessageManager : IAsyncDisposable
     private readonly CancellationTokenSource PendingThreadCancellationToken = new();
 
     private Hook<RaptureLogModule.Delegates.AddMsgSourceEntry>? ContentIdResolverHook { get; init; }
+    private volatile bool Disposed;
+
+    // How many lines of the game's log are looked through for missed messages
+    private const int RecoverScanLimit = 2_000;
+
+    // How far apart a log line and a stored message can be and still count as
+    // the same message. Stored dates come from our clock when the message was
+    // processed, log lines from the game in whole seconds.
+    private static readonly TimeSpan RecoverMatchWindow = TimeSpan.FromSeconds(30);
+
+    // Unix seconds of when the chat event was subscribed, everything after it
+    // has been caught by the event.
+    private long SubscribedAt = long.MaxValue;
 
     public ulong CurrentContentId
     {
@@ -85,13 +99,26 @@ public class MessageManager : IAsyncDisposable
         ContentIdResolverHook = Plugin.GameInteropProvider.HookFromAddress<RaptureLogModule.Delegates.AddMsgSourceEntry>(RaptureLogModule.MemberFunctionPointers.AddMsgSourceEntry, ContentIdResolver);
         ContentIdResolverHook.Enable();
 
-        Plugin.ChatGui.ChatMessageUnhandled += ChatMessage;
+        // Reading the game's log and subscribing in the same tick means every
+        // message is caught exactly once, either by the backfill or the event.
+        Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            if (Disposed)
+                return;
+
+            if (Plugin.Interface.Reason is not PluginLoadReason.Boot)
+                _ = RecoverLinesAsync(ReadGameLog(long.MaxValue, true));
+
+            Plugin.ChatGui.ChatMessageUnhandled += ChatMessage;
+            SubscribedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        });
         Plugin.Framework.Update += OnFrameworkUpdate;
         Plugin.ClientState.Logout += Logout;
     }
 
     public async ValueTask DisposeAsync()
     {
+        Disposed = true;
         ContentIdResolverHook?.Dispose();
         Plugin.ClientState.Logout -= Logout;
         Plugin.Framework.Update -= OnFrameworkUpdate;
@@ -239,6 +266,136 @@ public class MessageManager : IAsyncDisposable
         PendingSync.Enqueue(pendingMessage);
     }
 
+    /// <summary>
+    /// Looks through the game's log for messages from before this load that
+    /// never made it into the database, e.g. ones that came in while the plugin
+    /// was reloading, and saves them. Only types that get stored are looked at,
+    /// anything else was either caught by the event or can't be told apart
+    /// from what is already in the tabs.
+    /// </summary>
+    /// <returns>How many messages were recovered.</returns>
+    public async Task<int> RecoverMissedMessagesAsync()
+    {
+        var lines = await Plugin.Framework.RunOnFrameworkThread(() => ReadGameLog(SubscribedAt, false));
+        return await RecoverLinesAsync(lines);
+    }
+
+    private record GameLogLines(ulong Receiver, List<PendingMessage> Lines);
+
+    // Must run on the framework thread. Lines come back oldest first.
+    private unsafe GameLogLines ReadGameLog(long upTo, bool includeUnstored)
+    {
+        var receiver = CurrentContentId;
+        var lines = new List<PendingMessage>();
+        if (receiver == 0)
+            return new GameLogLines(receiver, lines);
+
+        try
+        {
+            var gameStarted = new DateTimeOffset(Plugin.GameStarted).ToUnixTimeSeconds();
+            var log = RaptureLogModule.Instance();
+            var newest = (int) log->GetLogMessageCount() - 1;
+            for (var i = newest; i >= 0 && newest - i < RecoverScanLimit; i--)
+            {
+                if (!log->GetLogMessageDetail(i, out var sender, out var content, out var logKind, out var sourceKind, out var targetKind, out var timestamp))
+                    break;
+
+                if (timestamp < gameStarted)
+                    break;
+
+                if (timestamp > upTo)
+                    continue;
+
+                var pending = new PendingMessage
+                {
+                    ContentId = 0,
+                    AccountId = 0,
+                    LogKind = (XivChatType) logKind,
+                    SourceKind = (XivChatRelationKind) sourceKind,
+                    TargetKind = (XivChatRelationKind) targetKind,
+                    Sender = SeString.Parse(sender),
+                    Content = SeString.Parse(content),
+                    Date = DateTimeOffset.FromUnixTimeSeconds(timestamp),
+                };
+
+                if (includeUnstored || ShouldStore(new ChatCode(pending.LogKind, pending.SourceKind, pending.TargetKind)))
+                    lines.Add(pending);
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Error reading the game's log");
+        }
+
+        lines.Reverse();
+        return new GameLogLines(receiver, lines);
+    }
+
+    // Recovered messages have no content ID, the game doesn't keep one per
+    // line. Each stored message can only match one line, so repeated lines
+    // with the same text are counted properly.
+    private Task<int> RecoverLinesAsync(GameLogLines log)
+    {
+        return Task.Run(() =>
+        {
+            try
+            {
+                if (log.Lines.Count == 0)
+                    return 0;
+
+                var stored = new Dictionary<(ChatType, string, string), List<DateTimeOffset>>();
+                var after = log.Lines[0].Date!.Value - RecoverMatchWindow;
+                var before = log.Lines[^1].Date!.Value + RecoverMatchWindow;
+                foreach (var (date, type, sender, content) in Store.GetMessageTexts(log.Receiver, after, before))
+                {
+                    if (!stored.TryGetValue((type, sender, content), out var dates))
+                        stored[(type, sender, content)] = dates = [];
+
+                    dates.Add(date);
+                }
+
+                var missed = new List<PendingMessage>();
+                foreach (var line in log.Lines)
+                {
+                    var key = (new ChatCode(line.LogKind, line.SourceKind, line.TargetKind).Type, line.Sender.TextValue, line.Content.TextValue);
+                    if (stored.TryGetValue(key, out var dates))
+                    {
+                        var match = dates.FindIndex(date => (date - line.Date!.Value).Duration() <= RecoverMatchWindow);
+                        if (match != -1)
+                        {
+                            dates.RemoveAt(match);
+                            continue;
+                        }
+                    }
+
+                    missed.Add(line);
+                }
+
+                if (missed.Count == 0)
+                    return 0;
+
+                missed[^1].SortTabsAfter = true;
+                foreach (var pending in missed)
+                    PendingAsync.Add(pending);
+
+                Plugin.Log.Info($"Recovered {missed.Count} messages from the game's log");
+                return missed.Count;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error(ex, "Error recovering messages from the game's log");
+                return 0;
+            }
+        });
+    }
+
+    private static bool ShouldStore(ChatCode code)
+    {
+        var isBattle = code.IsBattle();
+        var isCraftOrGather = code.IsCraftOrGather();
+        return (!isBattle && !isCraftOrGather) || (isBattle && Plugin.Config.DatabaseBattleMessages) || (isCraftOrGather && Plugin.Config.DatabaseGatherCraftMessages);
+    }
+
     private static unsafe void PlayPlayerAlert(SeString sender)
     {
         if (Plugin.Config.PlayerAlerts.Count == 0)
@@ -290,21 +447,27 @@ public class MessageManager : IAsyncDisposable
         }
 
         var contentChunks = ChunkUtil.ToChunks(pendingMessage.Content, ChunkSource.Content, chatCode.Type).ToList();
-        var message = new Message(CurrentContentId, pendingMessage.ContentId, pendingMessage.AccountId, chatCode, senderChunks, contentChunks, pendingMessage.Sender, pendingMessage.Content);
+        var message = new Message(CurrentContentId, pendingMessage.ContentId, pendingMessage.AccountId, chatCode, senderChunks, contentChunks, pendingMessage.Sender, pendingMessage.Content, pendingMessage.Date);
 
-        var isBattle = message.Code.IsBattle();
-        var isCraftOrGather = message.Code.IsCraftOrGather();
-        if ((!isBattle && !isCraftOrGather) || (isBattle && Plugin.Config.DatabaseBattleMessages) || (isCraftOrGather && Plugin.Config.DatabaseGatherCraftMessages))
+        if (ShouldStore(message.Code))
             Store.UpsertMessage(message);
 
+        // Recovered messages are old news, so they don't count as unread
+        var recovered = pendingMessage.Date != null;
         var currentMatches = Plugin.CurrentTab.Matches(message);
         foreach (var tab in Plugin.Config.Tabs)
         {
-            var unread = !(tab.UnreadMode == UnreadMode.Unseen && Plugin.CurrentTab != tab && currentMatches);
+            var unread = !recovered && !(tab.UnreadMode == UnreadMode.Unseen && Plugin.CurrentTab != tab && currentMatches);
 
             if (tab.Matches(message))
                 tab.AddMessage(message, unread);
         }
+
+        // Recovered messages are older than what's already in the tabs, so put
+        // them in place once the whole batch is in.
+        if (pendingMessage.SortTabsAfter)
+            foreach (var tab in Plugin.Config.Tabs)
+                tab.Messages.Sort();
 
         Plugin.TellWindows.ProcessMessage(message);
     }
@@ -378,5 +541,7 @@ public class MessageManager : IAsyncDisposable
         public XivChatRelationKind TargetKind;
         public required SeString Sender;
         public required SeString Content;
+        public DateTimeOffset? Date; // null for now, set when recovered from the game's log
+        public bool SortTabsAfter; // set on the last message of a recovered batch
     }
 }

@@ -42,6 +42,12 @@
         "resolved": "3.3.0",
         "contentHash": "2rvIoIogQG1+vqvXCuz1xiAVljaiacG/wCz/TNpN74TzWw+9iSCjhBLf7kVg24sBi6tArRdrcklHq49ovW2NLA=="
       },
+      "WeCantSpell.Hunspell": {
+        "type": "Direct",
+        "requested": "[7.0.1, )",
+        "resolved": "7.0.1",
+        "contentHash": "Ha0x66QWA+IPj2kJYoweA8MSnB1tymBW6kAIS6Kkj/U3SlMLCBPjDlUXzrrY1zJAxVItrGpFIXjkl3eEIYIE9A=="
+      },
       "MessagePack.Annotations": {
         "type": "Transitive",
         "resolved": "3.1.12",

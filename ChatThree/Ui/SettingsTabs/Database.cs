@@ -32,6 +32,8 @@ public sealed class Database : ISettingsTab
     private long DatabaseLogSize;
     private int DatabaseMessageCount;
 
+    private Task<int>? Recovering;
+
     public void Draw(bool changed)
     {
         if (changed)
@@ -59,6 +61,8 @@ public sealed class Database : ISettingsTab
         ImGui.SameLine();
         if (ImGuiUtil.IconButton(FontAwesomeIcon.FolderOpen, "OpenDBViewer"))
             Plugin.ToggleDBViewerWindow();
+        ImGui.Spacing();
+        DrawRecover();
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -164,6 +168,31 @@ public sealed class Database : ISettingsTab
         if (ImGuiUtil.CtrlShiftButton("Inject 10,000 messages", "Ctrl+Shift: creates 10,000 unique messages (async)"))
             new Thread(() => InsertMessages(10_000)).Start();
         ImGui.Spacing();
+    }
+
+    private void DrawRecover()
+    {
+        var busy = Recovering is { IsCompleted: false };
+        using (ImRaii.Disabled(busy))
+        {
+            if (ImGui.Button(Language.Options_Database_Recover))
+                Recovering = Plugin.MessageManager.RecoverMissedMessagesAsync();
+        }
+
+        if (busy)
+        {
+            ImGui.SameLine();
+            ImGui.AlignTextToFramePadding();
+            ImGuiUtil.HelpText(Language.Options_Database_Recovering);
+        }
+        else if (Recovering is { IsCompletedSuccessfully: true })
+        {
+            ImGui.SameLine();
+            ImGui.AlignTextToFramePadding();
+            ImGuiUtil.HelpText(string.Format(Language.Options_Database_Recovered, Recovering.Result));
+        }
+
+        ImGuiUtil.HelpText(Language.Options_Database_Recover_Description);
     }
 
     private void InsertMessages(int count)

@@ -524,6 +524,49 @@ public class MessageStore : IDisposable
     }
 
     /// <summary>
+    /// Get the date, type and plain sender and content text of every message
+    /// in a date range, without decoding the rest of each message. Used to
+    /// match the game's log against what is already stored.
+    /// </summary>
+    public List<(DateTimeOffset Date, ChatType Type, string Sender, string Content)> GetMessageTexts(ulong receiver, DateTimeOffset after, DateTimeOffset before)
+    {
+        using var cmd = Connection.CreateCommand();
+        cmd.CommandText = @"
+            SELECT Date, ChatType, SenderSource, ContentSource
+            FROM messages
+            WHERE deleted = false
+              AND Receiver = $Receiver
+              AND Date BETWEEN $After AND $Before;
+        ";
+        cmd.CommandTimeout = 120; // this could take a while on slow computers
+
+        cmd.Parameters.AddWithValue("$Receiver", receiver);
+        cmd.Parameters.AddWithValue("$After", after.ToUnixTimeMilliseconds());
+        cmd.Parameters.AddWithValue("$Before", before.ToUnixTimeMilliseconds());
+
+        var texts = new List<(DateTimeOffset, ChatType, string, string)>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            try
+            {
+                var date = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(0));
+                var type = (ChatType) reader.GetInt32(1);
+                var sender = MessagePackSerializer.Deserialize<SeString>(reader.GetFieldValue<byte[]>(2), MsgPackOptions);
+                var content = MessagePackSerializer.Deserialize<SeString>(reader.GetFieldValue<byte[]>(3), MsgPackOptions);
+                texts.Add((date, type, sender.TextValue, content.TextValue));
+            }
+            catch (Exception)
+            {
+                // Unreadable rows are reported and cleaned up by the normal
+                // message load, so they are only skipped here.
+            }
+        }
+
+        return texts;
+    }
+
+    /// <summary>
     /// Marks a message as deleted so it won't get returned in queries.
     /// </summary>
     public void DeleteMessage(Guid id)

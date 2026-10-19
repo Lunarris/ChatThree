@@ -72,6 +72,8 @@ public class Configuration : IPluginConfiguration
     public bool OnlyPreviewIf;
     public int PreviewMinimum = 1;
     public PreviewPosition PreviewPosition = PreviewPosition.Inside;
+    public bool SpellCheck;
+    public HashSet<string> SpellCheckWords = []; // Changed live from the preview, so UpdateFrom leaves it alone
     public CommandHelpSide CommandHelpSide = CommandHelpSide.None;
     public KeybindMode KeybindMode = KeybindMode.Strict;
     public bool CanMove = true;
@@ -163,6 +165,7 @@ public class Configuration : IPluginConfiguration
         OnlyPreviewIf = other.OnlyPreviewIf;
         PreviewMinimum = other.PreviewMinimum;
         PreviewPosition = other.PreviewPosition;
+        SpellCheck = other.SpellCheck;
         CommandHelpSide = other.CommandHelpSide;
         KeybindMode = other.KeybindMode;
         CanMove = other.CanMove;
@@ -451,6 +454,19 @@ public class Tab
 
             Messages.Add(message);
             TrackedMessageIds.Add(message.Id);
+        }
+
+        public void Sort()
+        {
+            LockSlim.Wait(-1);
+            try
+            {
+                SortLocked();
+            }
+            finally
+            {
+                LockSlim.Release();
+            }
         }
 
         public void Clear()
