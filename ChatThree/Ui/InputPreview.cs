@@ -40,6 +40,8 @@ public partial class InputPreview : Window
     private bool NamesStale;
     private int WordIndex;
     private SpellTarget? SpellPopupTarget;
+    private Vector2 SpellPopupPos;
+    private Vector2 SpellPopupPivot;
     private Task<List<string>>? SpellSuggestions;
 
     private record SpellTarget(string Word, int Start);
@@ -348,11 +350,16 @@ public partial class InputPreview : Window
         var leading = InputHandler.ChatInput.Length - InputHandler.ChatInput.TrimStart().Length;
         SpellPopupTarget = new SpellTarget(word, start + leading);
         SpellSuggestions = SpellChecker.SuggestAsync(word);
+
+        var viewport = ImGui.GetWindowViewport();
+        SpellPopupPos = ImGui.GetMousePos();
+        SpellPopupPivot = SpellPopupPos.Y > viewport.WorkPos.Y + viewport.WorkSize.Y / 2 ? new Vector2(0, 1) : Vector2.Zero;
         ImGui.OpenPopup(SpellPopupId);
     }
 
     private void DrawSpellPopup()
     {
+        ImGui.SetNextWindowPos(SpellPopupPos, ImGuiCond.Always, SpellPopupPivot);
         using var popup = ImRaii.Popup(SpellPopupId);
         if (!popup || SpellPopupTarget is not { } target)
             return;
