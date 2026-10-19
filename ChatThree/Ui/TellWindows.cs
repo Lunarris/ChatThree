@@ -152,19 +152,6 @@ public class TellWindows : IDisposable
             return [..Partners, ..Tabs.Select(t => t.TellTarget.Name)];
     }
 
-    /// <summary>
-    /// Adds everyone from the stored tell history to the partners, for tells
-    /// from earlier sessions or ones that came in before the plugin loaded.
-    /// Reads the database, so call it off the main thread.
-    /// </summary>
-    public void LoadPartnersFromHistory()
-    {
-        var conversations = GetConversations();
-        lock (TabsLock)
-            foreach (var conversation in conversations)
-                Partners.Add(conversation.Name);
-    }
-
     //List for the conversations window to keep list users to open message engagements with.
     public List<TellConversation> GetConversations()
     {

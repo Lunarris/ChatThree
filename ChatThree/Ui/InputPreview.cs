@@ -37,7 +37,6 @@ public partial class InputPreview : Window
     private const string SpellPopupId = "##chat3-spellcheck";
     private readonly SpellChecker SpellChecker = new();
     private int SkipWords;
-    private bool NamesStale;
     private int WordIndex;
     private SpellTarget? SpellPopupTarget;
     private Vector2 SpellPopupPos;
@@ -117,7 +116,9 @@ public partial class InputPreview : Window
             var trimmed = InputHandler.ChatInput.Trim();
             var command = trimmed.StartsWith('/') ? trimmed.Split(' ')[0] : null;
             SkipWords = command is null ? 0 : command is "/t" or "/tell" ? 2 : 1;
-            NamesStale = true;
+
+            if (Plugin.Config.SpellCheck)
+                SpellChecker.SetNames(PlayerNames());
 
             var bytes = Encoding.UTF8.GetBytes(trimmed);
             AutoTranslate.ReplaceWithPayload(ref bytes);
@@ -125,12 +126,6 @@ public partial class InputPreview : Window
             var chunks = ChunkUtil.ToChunks(SeString.Parse(bytes), ChunkSource.Content, ChatType.Say).ToList();
             PreviewMessage = Message.FakeMessage(chunks, new ChatCode(XivChatType.Say, 0, 0));
             PreviewMessage.DecodeTextParam();
-        }
-
-        if (NamesStale && Plugin.Config.SpellCheck)
-        {
-            NamesStale = false;
-            SpellChecker.SetNames(PlayerNames());
         }
 
         HasEvaluation = !EffectiveOnlyPreviewIf || PreviewMessage.Content.Count > 1;
@@ -305,9 +300,6 @@ public partial class InputPreview : Window
         }
         ImGui.NewLine();
     }
-
-    // Picks up name changes without waiting for the next keystroke
-    public void RefreshNames() => NamesStale = true;
 
     // Party members, tell partners and whoever the current tab is sending tells to
     private IEnumerable<string> PlayerNames()

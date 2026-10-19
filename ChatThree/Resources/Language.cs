@@ -367,10 +367,6 @@ internal static class Language
     public const string Options_SpellCheck_Overridden = "Ignored while spell check is on.";
     public const string Options_SpellCheck_Words = "Your dictionary";
     public const string Options_SpellCheck_WordsEmpty = "Words you add from the preview show up here.";
-    public const string Options_SpellCheck_RefreshNames = "Refresh names";
-    public const string Options_SpellCheck_RefreshNames_Description = "Spell check skips the names of your party and anyone you've had a tell with this session. Refreshing also adds everyone from your saved tell history, which catches tells from earlier sessions or from before the plugin loaded.";
-    public const string Options_SpellCheck_RefreshingNames = "Loading tell history...";
-    public const string Options_SpellCheck_NameCount = "{0} tell partners known.";
     public const string SpellCheck_Searching = "Looking for suggestions...";
     public const string SpellCheck_NoSuggestions = "No suggestions";
     public const string SpellCheck_AddWord = "Add \"{0}\" to dictionary";

@@ -10,7 +10,6 @@ public sealed class Preview : ISettingsTab
 {
     private Plugin Plugin { get; }
     private Configuration Mutable { get; }
-    private volatile bool RefreshingNames;
 
     public string Name => $"{Language.Options_Preview_Tab}###tabs-preview";
 
@@ -25,8 +24,6 @@ public sealed class Preview : ISettingsTab
         using var wrap = ImRaii.TextWrapPos(0.0f);
 
         ImGuiUtil.OptionCheckbox(ref Mutable.SpellCheck, Language.Options_SpellCheck_Name, Language.Options_SpellCheck_Description);
-        ImGui.Spacing();
-        DrawRefreshNames();
         ImGui.Spacing();
 
         using (var combo = ImGuiUtil.BeginComboVertical(Language.Options_Preview_Name, Mutable.PreviewPosition.Name()))
@@ -55,40 +52,6 @@ public sealed class Preview : ISettingsTab
 
         ImGui.Spacing();
         DrawDictionary();
-    }
-
-    private void DrawRefreshNames()
-    {
-        using (ImRaii.Disabled(RefreshingNames))
-        {
-            if (ImGui.Button(Language.Options_SpellCheck_RefreshNames))
-            {
-                RefreshingNames = true;
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        Plugin.TellWindows.LoadPartnersFromHistory();
-                        Plugin.InputPreview.RefreshNames();
-                    }
-                    catch (Exception ex)
-                    {
-                        Plugin.Log.Error(ex, "Error loading tell partners for spell check");
-                    }
-                    finally
-                    {
-                        RefreshingNames = false;
-                    }
-                });
-            }
-        }
-
-        ImGui.SameLine();
-        ImGui.AlignTextToFramePadding();
-        ImGuiUtil.HelpText(RefreshingNames
-            ? Language.Options_SpellCheck_RefreshingNames
-            : string.Format(Language.Options_SpellCheck_NameCount, Plugin.TellWindows.PartnerNames().Distinct(StringComparer.OrdinalIgnoreCase).Count()));
-        ImGuiUtil.HelpText(Language.Options_SpellCheck_RefreshNames_Description);
     }
 
     // Works on the live config, since words are also added from the preview while this window is open
