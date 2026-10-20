@@ -593,7 +593,8 @@ public partial class ChatLog : Window, IChatWindow
 
     public void DrawMessageLog(Tab tab, PayloadHandler handler, float childHeight, bool switchedTab)
     {
-        using var child = ImRaii.Child("##chat3-messages", new Vector2(-1, childHeight), false, ImGuiWindowFlags.NoScrollbar);
+        // Always shown, an automatic scrollbar comes and goes on a log that only just fits and the text rewraps each time
+        using var child = ImRaii.Child("##chat3-messages", new Vector2(-1, childHeight), false, ImGuiWindowFlags.AlwaysVerticalScrollbar);
         if (!child.Success)
             return;
 
