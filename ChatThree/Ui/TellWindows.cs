@@ -17,6 +17,10 @@ public class TellWindows : IDisposable
     private volatile Tab[] Tabs = [];
     private readonly HashSet<Guid> Windows = [];
 
+    // Everyone the player has had a tell with this session, even with tell
+    // windows off, so spell check can leave their names alone.
+    private readonly HashSet<string> Partners = new(StringComparer.OrdinalIgnoreCase);
+
     // The best known way to reach each partner, keyed by "Name@World". A tab
     // built from a chat message alone has no content ID and falls back to a
     // plain /tell, so we keep what the game or an incoming tell told us.
@@ -45,6 +49,7 @@ public class TellWindows : IDisposable
 
             Tabs = [];
             Contexts.Clear();
+            Partners.Clear();
         }
     }
 
@@ -72,6 +77,9 @@ public class TellWindows : IDisposable
     {
         if (!TryGetPartner(message, out var partner))
             return;
+
+        lock (TabsLock)
+            Partners.Add(partner.Name);
 
         var tab = FindOrCreateTab(partner, Plugin.Config.TellWindows);
         if (tab == null)
@@ -133,6 +141,15 @@ public class TellWindows : IDisposable
 
         LoadHistory(tab, fullHistory);
         return tab;
+    }
+
+    /// <summary>
+    /// Names of this session's tell partners, plus anyone with an open tell window.
+    /// </summary>
+    public string[] PartnerNames()
+    {
+        lock (TabsLock)
+            return [..Partners, ..Tabs.Select(t => t.TellTarget.Name)];
     }
 
     //List for the conversations window to keep list users to open message engagements with.

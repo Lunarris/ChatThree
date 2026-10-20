@@ -35,7 +35,7 @@ public sealed class SettingsWindow : Window
         [
             new Display(Mutable),
             new ChatLogConfig(Plugin, Mutable),
-            new Preview(Mutable),
+            new Preview(Plugin, Mutable),
             new Fonts(Mutable),
             new ChatColours(Plugin, Mutable),
             new Tabs(Plugin, Mutable),

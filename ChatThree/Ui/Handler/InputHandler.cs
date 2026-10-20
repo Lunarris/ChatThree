@@ -135,7 +135,7 @@ public class InputHandler
                 ImGui.TextColored(ImGuiColors.DalamudRed, string.Format(Language.ChannelGuard_Confirm, pending.Send.Destination));
             }
 
-            var tooltipDraw = pending == null && Plugin.Config.PreviewPosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawableFor(this);
+            var tooltipDraw = pending == null && InputPreview.EffectivePosition is PreviewPosition.Tooltip && Plugin.InputPreview.IsDrawableFor(this);
             if (tooltipDraw && ImGui.IsItemHovered())
             {
                 ImGui.SetNextWindowSize(new Vector2(500 * ImGuiHelpers.GlobalScale, -1));
