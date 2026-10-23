@@ -26,6 +26,11 @@ public sealed class SymbolHandler
     private static List<SymbolEntry>? OtherSymbols;
     private static Dictionary<string, string>? BuiltInShortcuts;
 
+    // Search results, redone only when the search text changes or a picker opens
+    private static string? FilterSearch;
+    private static List<SymbolEntry>? FilteredGame;
+    private static List<SymbolEntry>? FilteredOther;
+
     private InputHandler InputHandler { get; }
     private string Search = string.Empty;
     private bool WasOpen;
@@ -146,6 +151,8 @@ public sealed class SymbolHandler
             {
                 InputHandler.Activate = true;
                 InputHandler.ActivatePos = InputHandler.CursorPos;
+                InputHandler.Plugin.SaveConfig();
+                InsertedWhileOpen = false;
             }
 
             WasOpen = false;
@@ -153,32 +160,47 @@ public sealed class SymbolHandler
         }
 
         WasOpen = true;
-        EnsureCatalog(InputHandler.Plugin);
+        DrawGrid(InputHandler.Plugin, ref Search, Insert);
+    }
+
+    public static void DrawGrid(Plugin plugin, ref string searchText, Action<string> onPick)
+    {
+        EnsureCatalog(plugin);
 
         var cell = new Vector2(ImGui.GetFrameHeight() * 1.25f);
         var spacing = ImGui.GetStyle().ItemSpacing.X;
         var gridWidth = Columns * cell.X + (Columns - 1) * spacing;
 
         if (ImGui.IsWindowAppearing())
+        {
             ImGui.SetKeyboardFocusHere();
+            FilterSearch = null;
+        }
         ImGui.SetNextItemWidth(gridWidth);
-        ImGui.InputTextWithHint("##symbol-search", Language.Symbols_SearchHint, ref Search, 64);
+        ImGui.InputTextWithHint("##symbol-search", Language.Symbols_SearchHint, ref searchText, 64);
 
         using var child = ImRaii.Child("##symbol-grid", new Vector2(gridWidth + ImGui.GetStyle().ScrollbarSize, cell.Y * 8));
         if (!child)
             return;
 
-        var search = Search.Trim();
+        var search = searchText.Trim();
         if (search.Length == 0 && Plugin.Config.RecentSymbols.Count > 0)
         {
             var recent = Plugin.Config.RecentSymbols
                 .Select(text => GameSymbols!.FirstOrDefault(e => e.Text == text) ?? new SymbolEntry(text, string.Empty, null))
                 .ToList();
-            DrawSection(Language.Symbols_Recent, recent, cell, "recent");
+            DrawSection(Language.Symbols_Recent, recent, cell, "recent", onPick);
         }
 
-        DrawSection(Language.Symbols_Game, Filter(GameSymbols!, search), cell, "game");
-        DrawSection(Language.Symbols_Other, Filter(OtherSymbols!, search), cell, "other");
+        if (search != FilterSearch)
+        {
+            FilterSearch = search;
+            FilteredGame = Filter(GameSymbols!, search);
+            FilteredOther = Filter(OtherSymbols!, search);
+        }
+
+        DrawSection(Language.Symbols_Game, FilteredGame!, cell, "game", onPick);
+        DrawSection(Language.Symbols_Other, FilteredOther!, cell, "other", onPick);
     }
 
     private static List<SymbolEntry> Filter(List<SymbolEntry> entries, string search)
@@ -193,7 +215,7 @@ public sealed class SymbolHandler
             || CustomNamesFor(e.Text).Any(n => n.Contains(search, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
-    private void DrawSection(string title, List<SymbolEntry> entries, Vector2 cell, string id)
+    private static void DrawSection(string title, List<SymbolEntry> entries, Vector2 cell, string id, Action<string> onPick)
     {
         if (entries.Count == 0)
             return;
@@ -207,7 +229,7 @@ public sealed class SymbolHandler
                 ImGui.SameLine();
 
             if (ImGui.Button($"{entry.Text}##{i}", cell))
-                Insert(entry.Text);
+                onPick(entry.Text);
 
             if (ImGui.IsItemHovered())
                 DrawTooltip(entry);
@@ -258,7 +280,6 @@ public sealed class SymbolHandler
         recent.Insert(0, text);
         if (recent.Count > MaxRecent)
             recent.RemoveRange(MaxRecent, recent.Count - MaxRecent);
-        InputHandler.Plugin.SaveConfig();
     }
 
     private static string SplitWords(string name)

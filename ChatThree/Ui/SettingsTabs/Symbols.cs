@@ -1,3 +1,4 @@
+using System.Text;
 using ChatThree.Resources;
 using ChatThree.Ui.Handler;
 using ChatThree.Util;
@@ -12,6 +13,7 @@ public sealed class Symbols : ISettingsTab
 {
     private Plugin Plugin { get; }
     private Configuration Mutable { get; }
+    private string PickerSearch = string.Empty;
 
     public string Name => $"{Language.Options_Symbols_Tab}###tabs-symbols";
 
@@ -77,6 +79,23 @@ public sealed class Symbols : ISettingsTab
             ImGui.SameLine();
             ImGui.SetNextItemWidth(textWidth);
             ImGui.InputTextWithHint("##text", Language.Options_SymbolShortcuts_Text_Hint, ref shortcut.Text, 64);
+
+            ImGui.SameLine();
+            if (ImGuiUtil.IconButton(FontAwesomeIcon.Star, "pick", Language.Symbols_ButtonTooltip))
+            {
+                PickerSearch = string.Empty;
+                ImGui.OpenPopup("##symbol-pick");
+            }
+
+            using (var popup = ImRaii.Popup("##symbol-pick"))
+            {
+                if (popup)
+                    SymbolHandler.DrawGrid(Plugin, ref PickerSearch, symbol =>
+                    {
+                        if (Encoding.UTF8.GetByteCount(shortcut.Text + symbol) < 64)
+                            shortcut.Text += symbol;
+                    });
+            }
 
             if (!string.IsNullOrWhiteSpace(shortcut.Name))
             {
