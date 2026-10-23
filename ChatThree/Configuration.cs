@@ -74,6 +74,10 @@ public class Configuration : IPluginConfiguration
     public PreviewPosition PreviewPosition = PreviewPosition.Inside;
     public bool SpellCheck;
     public HashSet<string> SpellCheckWords = []; // Changed live from the preview, so UpdateFrom leaves it alone
+    public bool ShowSymbolPicker = true;
+    public bool SymbolShortcuts = true;
+    public List<SymbolShortcut>? CustomSymbolShortcuts; // null until the defaults are added on first load
+    public List<string> RecentSymbols = []; // Changed live from the picker, so UpdateFrom leaves it alone
     public CommandHelpSide CommandHelpSide = CommandHelpSide.None;
     public KeybindMode KeybindMode = KeybindMode.Strict;
     public bool CanMove = true;
@@ -166,6 +170,9 @@ public class Configuration : IPluginConfiguration
         PreviewMinimum = other.PreviewMinimum;
         PreviewPosition = other.PreviewPosition;
         SpellCheck = other.SpellCheck;
+        ShowSymbolPicker = other.ShowSymbolPicker;
+        SymbolShortcuts = other.SymbolShortcuts;
+        CustomSymbolShortcuts = other.CustomSymbolShortcuts?.Select(shortcut => shortcut.Clone()).ToList();
         CommandHelpSide = other.CommandHelpSide;
         KeybindMode = other.KeybindMode;
         CanMove = other.CanMove;
@@ -208,6 +215,31 @@ public class Configuration : IPluginConfiguration
         ChatTabBackward = other.ChatTabBackward;
         MigrationStatus = other.MigrationStatus;
     }
+}
+
+[Serializable]
+public class SymbolShortcut
+{
+    public string Name = string.Empty;
+    public string Text = string.Empty;
+
+    public SymbolShortcut Clone()
+    {
+        return new SymbolShortcut { Name = Name, Text = Text };
+    }
+
+    public static List<SymbolShortcut> Defaults() =>
+    [
+        new() { Name = "hq", Text = "" },
+        new() { Name = "star", Text = "★" },
+        new() { Name = "heart", Text = "♥" },
+        new() { Name = "note", Text = "♪" },
+        new() { Name = "check", Text = "✓" },
+        new() { Name = "left", Text = "←" },
+        new() { Name = "right", Text = "→" },
+        new() { Name = "up", Text = "↑" },
+        new() { Name = "down", Text = "↓" },
+    ];
 }
 
 [Serializable]

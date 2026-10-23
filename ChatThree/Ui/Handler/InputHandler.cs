@@ -35,6 +35,7 @@ public class InputHandler
     public readonly SendHandler SendHandler;
     public readonly AutoCompleteHandler AutoCompleteHandler;
     public readonly PayloadHandler PayloadHandler;
+    public readonly SymbolHandler SymbolHandler;
     public readonly ChunkHandler ChunkHandler;
 
     public string ChatInput = string.Empty;
@@ -50,6 +51,8 @@ public class InputHandler
 
     public int CursorPos;
     public int ActivatePos = -1;
+    private bool InputHasSelection;
+    private bool ShortcutCheckPending;
 
     public readonly string InputHandlerId;
 
@@ -63,6 +66,7 @@ public class InputHandler
         ChunkHandler = new ChunkHandler(plugin);
         PayloadHandler = new PayloadHandler(this);
         AutoCompleteHandler = new AutoCompleteHandler(this);
+        SymbolHandler = new SymbolHandler(this);
     }
 
     public void DrawInputArea(Tab activeTab, float inputWidth, ref bool tellSpecial)
@@ -97,6 +101,10 @@ public class InputHandler
         if (showCounter)
             inputWidth -= ImGui.CalcTextSize($"{MaxInputBytes}/{MaxInputBytes}").X + ImGui.GetStyle().ItemSpacing.X;
 
+        var showSymbolPicker = Plugin.Config.ShowSymbolPicker;
+        if (showSymbolPicker)
+            inputWidth -= SymbolHandler.ButtonWidth;
+
         // A warned send stays pending only while the text, tab and channel are unchanged
         var pending = SendHandler.Pending;
         if (pending != null && (pending.Tab != activeTab || pending.Channel != activeTab.CurrentChannel.Channel || pending.Text != ChatInput.Trim()))
@@ -120,6 +128,12 @@ public class InputHandler
             using (ImRaii.PushColor(ImGuiCol.FrameBg, PendingFrameColour, pending != null))
             {
                 var flags = InputFlags | (!isChatEnabled ? ImGuiInputTextFlags.ReadOnly : ImGuiInputTextFlags.None);
+                if (InputFocused && !InputHasSelection && ImGui.GetIO().KeyCtrl)
+                {
+                    SuppressKeyPress(ImGuiKey.C);
+                    SuppressKeyPress(ImGuiKey.X);
+                }
+
                 ImGui.SetNextItemWidth(inputWidth);
                 ImGui.InputTextWithHint("##chat3-input", isChatEnabled ? "": Language.ChatLog_DisabledInput, ref ChatInput, MaxInputBytes, flags, Callback);
             }
@@ -218,11 +232,29 @@ public class InputHandler
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(inputBytes >= CounterCriticalBytes ? ImGuiColors.DalamudRed : ImGuiColors.DalamudYellow, $"{inputBytes}/{MaxInputBytes}");
         }
+
+        if (showSymbolPicker)
+        {
+            ImGui.SameLine();
+            SymbolHandler.DrawButton(activeTab is { InputDisabled: false });
+        }
     }
 
     private bool IsValidCommand(string command)
     {
         return Plugin.CommandManager.Commands.ContainsKey(command) || Plugin.Commands.AllCommands.ContainsKey(command);
+    }
+
+    // ImGui copies/cuts the whole line when nothing is selected. Making the key look
+    // already held (but not long enough to repeat) stops InputText seeing a press.
+    private static void SuppressKeyPress(ImGuiKey key)
+    {
+        var keyData = ImGuiP.GetKeyData(key);
+        if (keyData.DownDuration < 0)
+            return;
+
+        keyData.DownDuration = 0.001f;
+        keyData.DownDurationPrev = 0.001f;
     }
 
     private unsafe int Callback(scoped ref ImGuiInputTextCallbackData data)
@@ -242,6 +274,7 @@ public class InputHandler
         }
 
         CursorPos = data.CursorPos;
+        InputHasSelection = data.SelectionStart != data.SelectionEnd;
         if (data.EventFlag == ImGuiInputTextFlags.CallbackCompletion)
         {
             if (data.CursorPos == 0)
@@ -269,8 +302,20 @@ public class InputHandler
         }
 
         if (data.EventFlag == ImGuiInputTextFlags.CallbackCharFilter)
+        {
             if (!Plugin.Functions.Chat.IsCharValid((char) data.EventChar))
                 return 1;
+
+            ShortcutCheckPending = data.EventChar == ':';
+        }
+
+        // The typed ':' is in the buffer by the time the always callback runs
+        if (data.EventFlag == ImGuiInputTextFlags.CallbackAlways && ShortcutCheckPending)
+        {
+            ShortcutCheckPending = false;
+            SymbolHandler.ExpandShortcut(ref data);
+            CursorPos = data.CursorPos;
+        }
 
         if (Activate)
         {
