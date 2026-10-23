@@ -244,7 +244,9 @@ public class MessageManager : IAsyncDisposable
     private void ChatMessage(IChatMessage message)
     {
         LastMessage = (message.Sender, message.Message);
-        PlayPlayerAlert(message.Sender);
+        // Catch for tells being sent to an alert set user
+        if (message.LogKind != XivChatType.TellOutgoing)
+            PlayPlayerAlert(message.Sender);
 
         var pendingMessage = new PendingMessage
         {

@@ -94,6 +94,8 @@ public sealed class Plugin : IDalamudPlugin
             if (Config.Tabs.Count == 0)
                 Config.Tabs.Add(TabsUtil.VanillaGeneral);
 
+            Config.CustomSymbolShortcuts ??= SymbolShortcut.Defaults();
+
             if (Config.Version < 7)
             {
                 foreach (var tab in Config.Tabs.Where(tab => tab.PopOut))
