@@ -130,6 +130,7 @@ public class Configuration : IPluginConfiguration
     public Dictionary<ChatType, uint> ChatColours = new();
     public List<Tab> Tabs = [];
     public List<PlayerAlert> PlayerAlerts = [];
+    public bool MuteAlertsInCutscenes = true;
 
     public bool OverrideStyle;
     public string? ChosenStyle;
@@ -193,6 +194,7 @@ public class Configuration : IPluginConfiguration
         CollapseDuplicateMessages = other.CollapseDuplicateMessages;
         CollapseKeepUniqueLinks = other.CollapseKeepUniqueLinks;
         PlaySounds = other.PlaySounds;
+        MuteAlertsInCutscenes = other.MuteAlertsInCutscenes;
         KeepInputFocus = other.KeepInputFocus;
         MaxLinesToRender = other.MaxLinesToRender;
         Use24HourClock = other.Use24HourClock;

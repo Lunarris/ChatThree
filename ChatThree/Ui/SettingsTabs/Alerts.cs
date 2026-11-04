@@ -24,6 +24,9 @@ public sealed class Alerts(Configuration mutable) : ISettingsTab
         ImGuiUtil.HelpText(Language.Options_Alerts_Description);
         ImGui.Spacing();
 
+        ImGuiUtil.OptionCheckbox(ref Mutable.MuteAlertsInCutscenes, Language.Options_Alerts_MuteInCutscenes_Name, Language.Options_Alerts_MuteInCutscenes_Description);
+        ImGui.Spacing();
+
         if (ImGui.Button(Language.Options_Alerts_Add))
             Mutable.PlayerAlerts.Add(new PlayerAlert());
 

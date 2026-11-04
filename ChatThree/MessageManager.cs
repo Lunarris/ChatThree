@@ -403,6 +403,9 @@ public class MessageManager : IAsyncDisposable
         if (Plugin.Config.PlayerAlerts.Count == 0)
             return;
 
+        if (Plugin.Config.MuteAlertsInCutscenes && Plugin.CutsceneActive)
+            return;
+
         if (sender.Payloads.FirstOrDefault(p => p is PlayerPayload) is not PlayerPayload player)
             return;
 

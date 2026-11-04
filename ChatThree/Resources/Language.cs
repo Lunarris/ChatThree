@@ -462,6 +462,8 @@ internal static class Language
     public const string Options_Alerts_Remove_Tooltip = "Remove this player";
     public const string Options_Alerts_Add = "Add player";
     public const string Options_Alerts_AddTarget = "Add current target";
+    public const string Options_Alerts_MuteInCutscenes_Name = "Mute alerts during cutscenes";
+    public const string Options_Alerts_MuteInCutscenes_Description = "Don't play sound alerts while a cutscene is playing.";
     public const string Context_Alerts = "Alerts";
     public const string Context_AddAlert = "Add Alert";
     public const string Context_AddAlertSuccess = "Added a sound alert for {0}";
