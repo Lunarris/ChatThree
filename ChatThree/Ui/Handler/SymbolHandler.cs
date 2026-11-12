@@ -18,6 +18,12 @@ public sealed class SymbolHandler
     private const string PopupId = "chat3-symbol-picker";
     private const int MaxRecent = 20;
     private const int Columns = 10;
+
+    private static readonly (string Text, string Name)[] ExtraGameSymbols =
+    [
+        ("\uE036", "Paw"),
+    ];
+
     private const string OtherSymbolChars = "★☆♥♡♪♫✓√←→↑↓《》※☀☁☂℃℉°♀♂♠♣♦♤♧♢®©™€£¥♯♭◎◆◇■□〇●○△▽▼▲‹›≤≥«»“”─＼～∞";
 
     private static readonly Regex ShortcutPattern = new(@":([^\s:]{1,32}):$", RegexOptions.Compiled);
@@ -131,6 +137,16 @@ public sealed class SymbolHandler
             var shortcut = icon.ToString().ToLowerInvariant();
             BuiltInShortcuts.TryAdd(shortcut, text);
             GameSymbols.Add(new SymbolEntry(text, SplitWords(icon.ToString()), shortcut));
+        }
+
+        foreach (var (text, name) in ExtraGameSymbols)
+        {
+            if (!IsSendable(plugin, text))
+                continue;
+
+            var shortcut = name.Replace(" ", string.Empty).ToLowerInvariant();
+            BuiltInShortcuts.TryAdd(shortcut, text);
+            GameSymbols.Add(new SymbolEntry(text, name, shortcut));
         }
 
         OtherSymbols = OtherSymbolChars
