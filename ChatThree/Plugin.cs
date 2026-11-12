@@ -213,6 +213,8 @@ public sealed class Plugin : IDalamudPlugin
         Interface.UiBuilder.DisableUserUiHide = !Config.HideWhenUiHidden;
         DefaultText = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
 
+        Theme.Update(SettingsWindow.Preview ?? Config);
+
         using ((Config.FontsEnabled ? FontManager.RegularFont : FontManager.Axis).Push())
             WindowSystem.Draw();
 

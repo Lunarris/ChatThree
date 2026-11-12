@@ -9,7 +9,7 @@ using Dalamud.Interface.Windowing;
 
 namespace ChatThree.Ui;
 
-public class TellConversationsWindow : Window
+public class TellConversationsWindow : ThemedWindow
 {
     private const string Command = "/chat3tells";
 

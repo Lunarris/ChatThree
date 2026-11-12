@@ -164,16 +164,32 @@ public class MessageManager : IAsyncDisposable
     {
         try
         {
-            foreach (var pendingMessage in PendingAsync.GetConsumingEnumerable(token))
+            // Whatever is already queued is handled as one batch: the messages
+            // are built, written to the database in one transaction, then
+            // delivered to the tabs in order. Nothing waits for more messages
+            // to arrive, so a batch is usually one message and only bursts
+            // (logging in, recovery, busy moments) get grouped.
+            foreach (var first in PendingAsync.GetConsumingEnumerable(token))
             {
-                try
+                BuildInto(first);
+                while (Batch.Count < MaxStoreBatch && PendingAsync.TryTake(out var next))
+                    BuildInto(next);
+
+                StoreBatch();
+
+                foreach (var (pending, message) in Batch)
                 {
-                    ProcessMessage(pendingMessage);
+                    try
+                    {
+                        Deliver(pending, message);
+                    }
+                    catch (Exception ex)
+                    {
+                        Plugin.Log.Error(ex, "Error processing pending message");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Plugin.Log.Error(ex, "Error processing pending message");
-                }
+
+                Batch.Clear();
             }
         }
         catch (OperationCanceledException)
@@ -435,7 +451,56 @@ public class MessageManager : IAsyncDisposable
         }
     }
 
-    private void ProcessMessage(PendingMessage pendingMessage)
+    private const int MaxStoreBatch = 256;
+    private readonly List<(PendingMessage Pending, Message Message)> Batch = [];
+    private readonly List<Message> ToStore = [];
+
+    private void BuildInto(PendingMessage pendingMessage)
+    {
+        try
+        {
+            Batch.Add((pendingMessage, BuildMessage(pendingMessage)));
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Error processing pending message");
+        }
+    }
+
+    private void StoreBatch()
+    {
+        ToStore.Clear();
+        foreach (var (_, message) in Batch)
+            if (ShouldStore(message.Code))
+                ToStore.Add(message);
+
+        if (ToStore.Count == 0)
+            return;
+
+        try
+        {
+            Store.UpsertMessages(ToStore);
+        }
+        catch (Exception ex)
+        {
+            // The transaction was rolled back, so try each message on its own
+            // to keep every message that can be stored.
+            Plugin.Log.Error(ex, $"Error storing {ToStore.Count} messages together, storing them one at a time");
+            foreach (var message in ToStore)
+            {
+                try
+                {
+                    Store.UpsertMessages([message]);
+                }
+                catch (Exception inner)
+                {
+                    Plugin.Log.Error(inner, "Error storing message");
+                }
+            }
+        }
+    }
+
+    private Message BuildMessage(PendingMessage pendingMessage)
     {
         var chatCode = new ChatCode(pendingMessage.LogKind, pendingMessage.SourceKind, pendingMessage.TargetKind);
 
@@ -452,11 +517,11 @@ public class MessageManager : IAsyncDisposable
         }
 
         var contentChunks = ChunkUtil.ToChunks(pendingMessage.Content, ChunkSource.Content, chatCode.Type).ToList();
-        var message = new Message(CurrentContentId, pendingMessage.ContentId, pendingMessage.AccountId, chatCode, senderChunks, contentChunks, pendingMessage.Sender, pendingMessage.Content, pendingMessage.Date);
+        return new Message(CurrentContentId, pendingMessage.ContentId, pendingMessage.AccountId, chatCode, senderChunks, contentChunks, pendingMessage.Sender, pendingMessage.Content, pendingMessage.Date);
+    }
 
-        if (ShouldStore(message.Code))
-            Store.UpsertMessage(message);
-
+    private void Deliver(PendingMessage pendingMessage, Message message)
+    {
         // Recovered messages are old news, so they don't count as unread
         var recovered = pendingMessage.Date != null;
         var currentMatches = Plugin.CurrentTab.Matches(message);

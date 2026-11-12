@@ -9,7 +9,7 @@ using Dalamud.Bindings.ImGui;
 
 namespace ChatThree.Ui;
 
-public sealed class SettingsWindow : Window
+public sealed class SettingsWindow : ThemedWindow
 {
     private readonly Plugin Plugin;
 
@@ -38,6 +38,7 @@ public sealed class SettingsWindow : Window
             new Preview(Plugin, Mutable),
             new Symbols(Plugin, Mutable),
             new Fonts(Mutable),
+            new ThemeSettings(Mutable),
             new ChatColours(Plugin, Mutable),
             new Tabs(Plugin, Mutable),
             new Alerts(Mutable),
@@ -66,6 +67,18 @@ public sealed class SettingsWindow : Window
         if (string.IsNullOrWhiteSpace(args))
             Toggle();
     }
+
+    private bool Previewing;
+
+    public Configuration? Preview => Previewing ? Mutable : null;
+
+    public override void OnOpen()
+    {
+        Initialise();
+        Previewing = true;
+    }
+
+    public override void OnClose() => Previewing = false;
 
     private void Initialise()
     {

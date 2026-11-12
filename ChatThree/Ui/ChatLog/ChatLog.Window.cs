@@ -9,7 +9,6 @@ using ChatThree.Util;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface;
-using Dalamud.Interface.Style;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -19,7 +18,7 @@ using Lumina.Extensions;
 
 namespace ChatThree.Ui.ChatLog;
 
-public partial class ChatLog : Window, IChatWindow
+public partial class ChatLog : ThemedWindow, IChatWindow
 {
     private const string ChatChannelPicker = "chat-channel-picker";
 
@@ -288,21 +287,21 @@ public partial class ChatLog : Window, IChatWindow
         }
 
         var currentTab = Plugin.CurrentTab; // local to avoid calling the getter repeatedly
-        var lastActivityTime = Plugin.Config.Tabs
-            .Where(tab => !tab.PopOut && (tab.UnhideOnActivity || tab == currentTab))
-            .Select(tab => tab.LastActivity)
-            .Append( InputHandler.LastActivityTime)
-            .Max();
+        var lastActivityTime = InputHandler.LastActivityTime;
+        foreach (var tab in Plugin.Config.Tabs)
+        {
+            if (!tab.PopOut && (tab.UnhideOnActivity || tab == currentTab) && tab.LastActivity > lastActivityTime)
+                lastActivityTime = tab.LastActivity;
+        }
         return  InputHandler.FrameTime - lastActivityTime <= 1000 * Plugin.Config.InactivityHideTimeout;
     }
 
     public override void PreDraw()
     {
+        base.PreDraw();
+
         if (Plugin.Config.KeepInputFocus &&  InputHandler.Activate)
             ImGui.SetWindowFocus(WindowName);
-
-        if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
-            StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Push();
     }
 
     public override void PostDraw()
@@ -314,8 +313,7 @@ public partial class ChatLog : Window, IChatWindow
         if (Plugin.CurrentTab.InputDisabled)
             InputHandler.Activate = false;
 
-        if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
-            StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Pop();
+        base.PostDraw();
     }
 
     public override void OnClose()

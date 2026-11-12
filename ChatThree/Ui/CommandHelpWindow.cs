@@ -8,7 +8,7 @@ using Lumina.Text.ReadOnly;
 
 namespace ChatThree.Ui;
 
-public class CommandHelpWindow : Window {
+public class CommandHelpWindow : ThemedWindow {
     private ChatLog.ChatLog ChatLogWindow { get; }
     private ReadOnlySeString? CommandDescription { get; set; }
 

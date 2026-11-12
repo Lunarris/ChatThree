@@ -17,7 +17,7 @@ using Dalamud.Bindings.ImGui;
 
 namespace ChatThree.Ui;
 
-public partial class InputPreview : Window
+public partial class InputPreview : ThemedWindow
 {
     private readonly InputHandler MainInputHandler;
     public InputHandler InputHandler { get; private set; }
@@ -143,6 +143,8 @@ public partial class InputPreview : Window
 
     public override void PreDraw()
     {
+        base.PreDraw();
+
         var pos = InputHandler.MainWindow.LastWindowPos;
         var size = InputHandler.MainWindow.LastWindowSize;
 

@@ -132,8 +132,10 @@ public class Configuration : IPluginConfiguration
     public List<PlayerAlert> PlayerAlerts = [];
     public bool MuteAlertsInCutscenes = true;
 
+    public bool UseTheme;
+    public ThemeScheme ThemeScheme = ThemeScheme.Midnight;
+
     public bool OverrideStyle;
-    public string? ChosenStyle;
 
     public ConfigKeyBind? ChatTabForward;
     public ConfigKeyBind? ChatTabBackward;
@@ -211,8 +213,9 @@ public class Configuration : IPluginConfiguration
         ChatColours = other.ChatColours.ToDictionary(entry => entry.Key, entry => entry.Value);
         Tabs = other.Tabs.Select(t => t.Clone()).ToList();
         PlayerAlerts = other.PlayerAlerts.Select(a => a.Clone()).ToList();
+        UseTheme = other.UseTheme;
+        ThemeScheme = other.ThemeScheme;
         OverrideStyle = other.OverrideStyle;
-        ChosenStyle = other.ChosenStyle;
         ChatTabForward = other.ChatTabForward;
         ChatTabBackward = other.ChatTabBackward;
         MigrationStatus = other.MigrationStatus;
@@ -643,6 +646,14 @@ public static class PreviewPositionExt
         PreviewPosition.Tooltip => Language.Options_Preview_Tooltip,
         _ => throw new ArgumentOutOfRangeException(nameof(position), position, null),
     };
+}
+
+[Serializable]
+public enum ThemeScheme
+{
+    Midnight,
+    Slate,
+    Ember,
 }
 
 [Serializable]

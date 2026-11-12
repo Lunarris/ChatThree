@@ -4,7 +4,6 @@ using ChatThree.GameFunctions.Types;
 using ChatThree.Resources;
 using ChatThree.Ui.Handler;
 using ChatThree.Util;
-using Dalamud.Interface.Style;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
@@ -12,7 +11,7 @@ using Dalamud.Interface;
 
 namespace ChatThree.Ui;
 
-public class Popout : Window, IChatWindow
+public class Popout : ThemedWindow, IChatWindow
 {
     private readonly Plugin Plugin;
     private readonly Tab Tab;
@@ -86,8 +85,7 @@ public class Popout : Window, IChatWindow
 
     public override void PreDraw()
     {
-        if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
-            StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Push();
+        base.PreDraw();
 
         Flags = ImGuiWindowFlags.NoFocusOnAppearing;
         if (!Plugin.Config.ShowPopOutTitleBar)
@@ -185,8 +183,7 @@ public class Popout : Window, IChatWindow
     {
         Docked = ImGui.IsWindowDocked();
 
-        if (Plugin.Config is { OverrideStyle: true, ChosenStyle: not null })
-            StyleModel.GetConfiguredStyles()?.FirstOrDefault(style => style.Name == Plugin.Config.ChosenStyle)?.Pop();
+        base.PostDraw();
     }
 
     public override void OnClose()

@@ -120,6 +120,10 @@ public class MessageStore : IDisposable
 
     private SqliteConnection Connection { get; set; }
 
+    // Only used by the pending message thread, so batched inserts can run in a
+    // transaction without catching the UI's queries on the main connection.
+    private SqliteConnection? WriteConnection { get; set; }
+
     public static readonly MessagePackSerializerOptions MsgPackOptions = MessagePackSerializerOptions.Standard
         .WithResolver(CompositeResolver.Create([new PayloadMessagePackFormatter(), new SeStringMessagePackFormatter()], [StandardResolver.Instance]));
 
@@ -129,10 +133,13 @@ public class MessageStore : IDisposable
         DbPath = dbPath;
         Connection = Connect();
         Migrate();
+        WriteConnection = Connect();
     }
 
     public void Dispose()
     {
+        WriteConnection?.Close();
+        WriteConnection?.Dispose();
         Connection.Close();
         Connection.Dispose();
         // Closing the connection doesn't immediately release the file.
@@ -361,9 +368,32 @@ public class MessageStore : IDisposable
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
-    public void UpsertMessage(Message message)
+    public void UpsertMessage(Message message) => Upsert(Connection, null, message);
+
+    // Writes the messages in one transaction on the write connection. Each
+    // insert touches the table and every index, so committing a batch at once
+    // writes those shared pages to the WAL once instead of once per message.
+    // Only call this from the pending message thread.
+    public void UpsertMessages(IReadOnlyList<Message> messages)
     {
-        using var cmd = Connection.CreateCommand();
+        var conn = WriteConnection ?? Connection;
+        if (messages.Count == 1)
+        {
+            Upsert(conn, null, messages[0]);
+            return;
+        }
+
+        using var transaction = conn.BeginTransaction();
+        foreach (var message in messages)
+            Upsert(conn, transaction, message);
+
+        transaction.Commit();
+    }
+
+    private static void Upsert(SqliteConnection conn, SqliteTransaction? transaction, Message message)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = transaction;
         cmd.CommandText = @"
             INSERT INTO messages (
                 Id,

@@ -1,6 +1,5 @@
 using ChatThree.Resources;
 using ChatThree.Util;
-using Dalamud.Interface.Style;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 
@@ -66,9 +65,6 @@ public sealed class ChatLogConfig : ISettingsTab
             ImGuiUtil.OptionCheckbox(ref Mutable.ShowPopOutTitleBar, Language.Options_ShowPopOutTitleBar_Name);
             ImGui.Spacing();
 
-            ImGuiUtil.OptionCheckbox(ref Mutable.OverrideStyle, Language.Options_OverrideStyle_Name, Language.Options_OverrideStyle_Name_Desc);
-            ImGui.Spacing();
-
             ImGui.Spacing();
             ImGui.Separator();
             ImGui.Spacing();
@@ -93,27 +89,5 @@ public sealed class ChatLogConfig : ISettingsTab
             ImGuiUtil.WarningText(Language.Options_AdjustPosition_Warning);
             ImGui.Spacing();
         }
-
-        if (!Mutable.OverrideStyle)
-            return;
-
-        var styles = StyleModel.GetConfiguredStyles();
-        if (styles == null)
-        {
-            ImGui.TextUnformatted(Language.Options_OverrideStyle_NotAvailable);
-            ImGui.Spacing();
-            return;
-        }
-
-        var currentStyle = Mutable.ChosenStyle ?? Language.Options_OverrideStyle_NotSelected;
-        using var combo = ImRaii.Combo(Language.Options_OverrideStyleDropdown_Name, currentStyle);
-        if (combo)
-        {
-            foreach (var style in styles)
-                if (ImGui.Selectable(style.Name, Mutable.ChosenStyle == style.Name))
-                    Mutable.ChosenStyle = style.Name;
-        }
-
-        ImGui.Spacing();
     }
 }
